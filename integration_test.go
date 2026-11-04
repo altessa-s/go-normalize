@@ -13,6 +13,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/altessa-s/go-normalize"
 	"github.com/altessa-s/go-normalize/modifiers"
@@ -200,5 +201,158 @@ func TestIntegrationErrorsCarryFieldContext(t *testing.T) {
 	}
 	if strings.Contains(err.Error(), "sku-secret") {
 		t.Fatalf("map key leaked into the error: %v", err)
+	}
+}
+
+type integrationSignup struct {
+	FullName string   `normalize:"trim,collapse_spaces,truncate(max=12)"`
+	Email    string   `normalize:"email"`
+	TaxID    *string  `normalize:"digits_only,nil_on_empty"`
+	Phone    *string  `normalize:"digits_only,nil_on_zero"`
+	Referrer *string  `normalize:"empty_on_nil,trim"`
+	Age      *int     `normalize:"nil_on_zero"`
+	Tags     []string `normalize:"remove_empty_elements,dedupe"`
+	Scores   []int    `normalize:"dedupe"`
+}
+
+func TestIntegrationSignupModifiers(t *testing.T) {
+	t.Parallel()
+	s := integrationSignup{
+		FullName: "  Anna \t Maria\u00a0 von   Ostrowski ",
+		Email:    " Anna.M@Example.ORG ",
+		TaxID:    new("no digits"),
+		Phone:    new("+49 (30) 1234-567"),
+		Age:      new(0),
+		Tags:     []string{"beta", " ", "vip", "beta"},
+		Scores:   []int{10, 7, 10},
+	}
+	normalizetest.RequireNormalized(t, normalize.Normalize, &s)
+	if s.FullName != "Anna Maria v" {
+		t.Errorf("FullName = %q", s.FullName)
+	}
+	if s.Email != "Anna.M@example.org" {
+		t.Errorf("Email = %q", s.Email)
+	}
+	if s.TaxID != nil || s.Phone == nil || *s.Phone != "49301234567" {
+		t.Errorf("TaxID = %v, Phone = %v", s.TaxID, s.Phone)
+	}
+	if s.Referrer == nil || *s.Referrer != "" || s.Age != nil {
+		t.Errorf("Referrer = %v, Age = %v", s.Referrer, s.Age)
+	}
+	if !reflect.DeepEqual(s.Tags, []string{"beta", "vip"}) || !reflect.DeepEqual(s.Scores, []int{10, 7}) {
+		t.Errorf("Tags = %v, Scores = %v", s.Tags, s.Scores)
+	}
+}
+
+func TestIntegrationInvalidModifierParameter(t *testing.T) {
+	t.Parallel()
+	type post struct {
+		Title string `normalize:"truncate(max=lots)"`
+	}
+	err := normalize.Normalize(&post{Title: "title"})
+	if !errors.Is(err, modifiers.ErrInvalidParameter) {
+		t.Fatalf("got %v, want ErrInvalidParameter", err)
+	}
+	if modifierErr, ok := errors.AsType[*modifiers.ModifierError](err); !ok || modifierErr.FieldPath != "Title" || modifierErr.ModifierName != "truncate" {
+		t.Fatalf("unexpected context: %v", err)
+	}
+}
+
+func TestIntegrationApplyModifierOnNumbers(t *testing.T) {
+	t.Parallel()
+	type percent int
+	r := modifiers.NewRegistry()
+	r.Register("percent", func(v reflect.Value, _ map[string]string) modifiers.ModifierResult {
+		return modifiers.ApplyModifier(v, func(n int) (int, bool) {
+			c := min(max(n, 0), 100)
+			return c, c != n
+		})
+	})
+	type report struct {
+		Done   percent  `normalize:"percent"`
+		Failed *percent `normalize:"percent"`
+		Rows   []struct {
+			Share int `normalize:"percent"`
+		}
+	}
+	v := report{Done: 140, Failed: new(percent(-5))}
+	v.Rows = append(v.Rows, struct {
+		Share int `normalize:"percent"`
+	}{Share: 101})
+	if err := normalize.NormalizeWithRegistry(&v, r); err != nil {
+		t.Fatal(err)
+	}
+	if v.Done != 100 || *v.Failed != 0 || v.Rows[0].Share != 100 {
+		t.Fatalf("unexpected result: %+v, Failed=%d", v, *v.Failed)
+	}
+}
+
+type integrationWebhook struct {
+	Endpoint   string     `normalize:"trim,url"`
+	Fallback   *string    `normalize:"url,nil_on_empty"`
+	CreatedAt  time.Time  `normalize:"utc,truncate_time(unit=us)"`
+	ExpiresAt  *time.Time `normalize:"utc,truncate_time(unit=1s)"`
+	Retries    int        `normalize:"clamp(min=0;max=10)"`
+	Timeout    float64    `normalize:"clamp(min=0.5;max=30)"`
+	Priority   *uint8     `normalize:"clamp(max=9)"`
+	Deliveries []struct {
+		At     time.Time `normalize:"utc"`
+		Status int       `normalize:"clamp(min=100;max=599)"`
+	}
+}
+
+func TestIntegrationWebhookModifiers(t *testing.T) {
+	t.Parallel()
+	zone := time.FixedZone("UTC+3", 3*3600)
+	created := time.Date(2026, 5, 6, 10, 0, 0, 123456789, zone)
+	expires := time.Date(2026, 6, 6, 10, 0, 0, 999999999, zone)
+	w := integrationWebhook{
+		Endpoint:  "  HTTPS://Hooks.Example.COM:443/in?Token=AbC#Top ",
+		Fallback:  new(""),
+		CreatedAt: created,
+		ExpiresAt: new(expires),
+		Retries:   99,
+		Timeout:   0.1,
+		Priority:  new(uint8(200)),
+	}
+	w.Deliveries = append(w.Deliveries, struct {
+		At     time.Time `normalize:"utc"`
+		Status int       `normalize:"clamp(min=100;max=599)"`
+	}{At: created, Status: 999})
+	normalizetest.RequireNormalized(t, normalize.Normalize, &w)
+
+	if w.Endpoint != "https://hooks.example.com/in?Token=AbC#Top" || w.Fallback != nil {
+		t.Errorf("Endpoint = %q, Fallback = %v", w.Endpoint, w.Fallback)
+	}
+	if w.CreatedAt.Location() != time.UTC || w.CreatedAt.Nanosecond() != 123456000 || !w.CreatedAt.Equal(created.Truncate(time.Microsecond)) {
+		t.Errorf("CreatedAt = %v", w.CreatedAt)
+	}
+	if w.ExpiresAt.Location() != time.UTC || w.ExpiresAt.Nanosecond() != 0 {
+		t.Errorf("ExpiresAt = %v", *w.ExpiresAt)
+	}
+	if w.Retries != 10 || w.Timeout != 0.5 || *w.Priority != 9 {
+		t.Errorf("Retries = %d, Timeout = %v, Priority = %d", w.Retries, w.Timeout, *w.Priority)
+	}
+	if d := w.Deliveries[0]; d.At.Location() != time.UTC || d.Status != 599 {
+		t.Errorf("Deliveries[0] = %+v", d)
+	}
+}
+
+func TestIntegrationClampBoundOutsideFieldType(t *testing.T) {
+	t.Parallel()
+	type config struct {
+		Workers []struct {
+			Weight int8 `normalize:"clamp(max=1000)"`
+		}
+	}
+	c := config{Workers: []struct {
+		Weight int8 `normalize:"clamp(max=1000)"`
+	}{{Weight: 5}}}
+	err := normalize.Normalize(&c)
+	if !errors.Is(err, modifiers.ErrInvalidParameter) {
+		t.Fatalf("got %v, want ErrInvalidParameter", err)
+	}
+	if modifierErr, ok := errors.AsType[*modifiers.ModifierError](err); !ok || modifierErr.FieldPath != "Workers[0].Weight" {
+		t.Fatalf("unexpected context: %v", err)
 	}
 }

@@ -7,6 +7,7 @@ package normalize
 import (
 	"math"
 	"reflect"
+	"unsafe"
 )
 
 type valuePair struct {
@@ -15,8 +16,9 @@ type valuePair struct {
 }
 
 // equalValue compares values for normalization changes. Unlike reflect.DeepEqual,
-// it treats NaNs and non-nil functions as unchanged when the traversal did not
-// replace them, which matters for map values keyed by non-reflexive keys.
+// it treats NaNs and functions as unchanged when the traversal did not replace
+// them, which matters for map values keyed by non-reflexive keys. It may report
+// a change that did not happen, never the reverse.
 func equalValue(a, b reflect.Value, seen map[valuePair]bool) bool {
 	if !a.IsValid() || !b.IsValid() {
 		return a.IsValid() == b.IsValid()
@@ -36,10 +38,7 @@ func equalValue(a, b reflect.Value, seen map[valuePair]bool) bool {
 	case reflect.Pointer:
 		return equalPointers(a, b, seen)
 	case reflect.Func:
-		// Function values compare by code pointer. Closures of one literal share it,
-		// and since Go 1.27 the compiler may share code between literals, so a
-		// modifier that swaps one closure for another can go unnoticed here.
-		return a.IsNil() == b.IsNil() && (a.IsNil() || a.Pointer() == b.Pointer())
+		return equalFuncs(a, b)
 	case reflect.Float32, reflect.Float64:
 		return a.Float() == b.Float() || (math.IsNaN(a.Float()) && math.IsNaN(b.Float()))
 	case reflect.Complex64, reflect.Complex128:
@@ -61,6 +60,37 @@ func equalValue(a, b reflect.Value, seen map[valuePair]bool) bool {
 		return reflect.DeepEqual(a.Interface(), b.Interface())
 	}
 	return a.Equal(b)
+}
+
+// equalFuncs reports whether two function values are the same closure. Code
+// pointers cannot tell: closures of one literal share their code, and since Go
+// 1.27 the compiler may share code between literals. A function value points to
+// its closure, the code together with the captured variables, so equal closure
+// pointers mean the same function. When a closure pointer cannot be read, the
+// values count as different, so a change is never lost.
+func equalFuncs(a, b reflect.Value) bool {
+	if a.IsNil() || b.IsNil() {
+		return a.IsNil() == b.IsNil()
+	}
+	pa, okA := closurePointer(a)
+	pb, okB := closurePointer(b)
+	return okA && okB && pa == pb
+}
+
+// closurePointer returns the closure a function value points to. A value
+// without an address, such as the dynamic value of an interface, is copied
+// first; the copy points to the same closure. A value read through an
+// unexported field without an address cannot be copied and reports false.
+func closurePointer(f reflect.Value) (unsafe.Pointer, bool) {
+	if !f.CanAddr() {
+		if !f.CanInterface() {
+			return nil, false
+		}
+		c := reflect.New(f.Type()).Elem()
+		c.Set(f)
+		f = c
+	}
+	return *(*unsafe.Pointer)(f.Addr().UnsafePointer()), true //nolint:gosec // #nosec G103 -- reads the closure pointer a func value holds
 }
 
 func sameNil(a, b reflect.Value) bool { return a.IsNil() == b.IsNil() }

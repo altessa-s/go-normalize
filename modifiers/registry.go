@@ -72,5 +72,16 @@ func buildDefaultRegistry() *Registry {
 	r.Register("nil_on_empty", NilOnEmpty)
 	r.Register("remove_bad_symbols", RemoveBadSymbols)
 	r.Register("remove_empty_elements", RemoveEmptyElements)
+	r.Register("collapse_spaces", CollapseSpaces)
+	r.Register("truncate", Truncate)
+	r.Register("digits_only", DigitsOnly)
+	r.Register("email", Email)
+	r.Register("nil_on_zero", NilOnZero)
+	r.Register("empty_on_nil", EmptyOnNil)
+	r.Register("dedupe", Dedupe)
+	r.Register("utc", UTC)
+	r.Register("truncate_time", TruncateTime)
+	r.Register("clamp", Clamp)
+	r.Register("url", URL)
 	return r
 }

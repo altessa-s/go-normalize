@@ -8,6 +8,8 @@ updates:
     directories:
       - /
       - /phone
+      - /text
+      - /idna
       - /devtools
     target-branch: develop
     schedule:

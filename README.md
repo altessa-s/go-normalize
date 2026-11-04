@@ -31,6 +31,8 @@ field and `custom` leaves it to the parent's `CustomNormalizer`.
 | [`modifiers`](modifiers/README.md)         | Modifier types, the concurrency-safe registry and the built-in modifiers  |
 | [`normalizetest`](normalizetest/README.md) | Test helpers for consumers                                                |
 | [`phone`](phone/README.md)                 | Opt-in phone-number modifier, a separate module                           |
+| [`text`](text/README.md)                   | Opt-in Unicode modifiers: `nfc`, `nfkc`, `fold`, `title`, a separate module |
+| [`idna`](idna/README.md)                   | Opt-in punycode conversion of domains, emails and URL hosts, a separate module |
 
 ## Key types
 

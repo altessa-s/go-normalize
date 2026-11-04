@@ -6,8 +6,10 @@ package modifiers
 
 import (
 	"reflect"
+	"strconv"
 	"strings"
 	"unicode"
+	"unicode/utf8"
 )
 
 func stringModifier(fn func(string) string) Modifier {
@@ -16,62 +18,38 @@ func stringModifier(fn func(string) string) Modifier {
 	}
 }
 
-// ApplyStringModifier transforms string and *string values.
-func ApplyStringModifier(v reflect.Value, fn func(string) (string, bool)) ModifierResult {
-	if !v.IsValid() {
-		return ModifierResult{}
+// NilOnEmpty sets empty *string fields to nil. In a pointer chain the innermost
+// pointer is cleared.
+func NilOnEmpty(v reflect.Value, _ map[string]string) ModifierResult {
+	return clearInnermost(v, func(x reflect.Value) bool { return x.Kind() == reflect.String && x.Len() == 0 })
+}
+
+// clearInnermost sets the innermost pointer of the chain v to nil when empty
+// reports the value it points to. A chain that cannot be set is copied first.
+func clearInnermost(v reflect.Value, empty func(reflect.Value) bool) ModifierResult {
+	if !v.IsValid() || v.Kind() != reflect.Pointer {
+		return ModifierResult{Value: v}
 	}
-	if v.Kind() == reflect.Pointer && !v.IsNil() && v.Type().Elem().Kind() == reflect.String && !v.CanSet() {
-		n, changed := fn(v.Elem().String())
-		if changed {
-			x := reflect.New(v.Type().Elem())
-			x.Elem().SetString(n)
-			return ModifierResult{Value: x}
+	if !v.CanSet() {
+		root, _, _, ok := copyChain(v, false)
+		if ok && clearPointer(root, empty) {
+			return ModifierResult{Value: root}
 		}
 		return ModifierResult{Value: v}
 	}
-	leaf := v
-	for leaf.Kind() == reflect.Pointer {
-		if leaf.IsNil() {
-			return ModifierResult{Value: v}
-		}
-		leaf = leaf.Elem()
-	}
-	if leaf.Kind() == reflect.String {
-		n, c := fn(leaf.String())
-		if c {
-			if leaf.CanSet() {
-				leaf.SetString(n)
-			} else {
-				x := reflect.New(leaf.Type()).Elem()
-				x.SetString(n)
-				return ModifierResult{Value: x}
-			}
-		}
-		return ModifierResult{Value: v}
-	}
+	clearPointer(v, empty)
 	return ModifierResult{Value: v}
 }
 
-// NilOnEmpty sets empty *string fields to nil.
-func NilOnEmpty(v reflect.Value, _ map[string]string) ModifierResult {
-	if !v.IsValid() {
-		return ModifierResult{Value: v}
+func clearPointer(p reflect.Value, empty func(reflect.Value) bool) bool {
+	for !p.IsNil() && p.Elem().Kind() == reflect.Pointer {
+		p = p.Elem()
 	}
-	leaf := v
-	for leaf.Kind() == reflect.Pointer {
-		if leaf.IsNil() {
-			return ModifierResult{Value: v}
-		}
-		if leaf.Type().Elem().Kind() == reflect.String {
-			if leaf.Elem().Len() == 0 && leaf.CanSet() {
-				leaf.Set(reflect.Zero(leaf.Type()))
-			}
-			return ModifierResult{Value: v}
-		}
-		leaf = leaf.Elem()
+	if p.IsNil() || !empty(p.Elem()) {
+		return false
 	}
-	return ModifierResult{Value: v}
+	p.Set(reflect.Zero(p.Type()))
+	return true
 }
 
 // RemoveEmptyElements removes blank strings and nil values from string slices.
@@ -137,4 +115,178 @@ func isBadSymbol(r rune) bool {
 		return true
 	}
 	return r >= 0x1d173 && r <= 0x1d17a || r >= 0xe0000 && r <= 0xe007f
+}
+
+// CollapseSpaces replaces every run of white space, as defined by
+// unicode.IsSpace, with a single ASCII space. It does not trim; combine it with
+// trim for that. Bytes that are not valid UTF-8 are kept as they are.
+func CollapseSpaces(v reflect.Value, _ map[string]string) ModifierResult {
+	return ApplyStringModifier(v, collapseSpaces)
+}
+
+func collapseSpaces(s string) (string, bool) {
+	if !needsCollapse(s) {
+		return s, false
+	}
+	var b strings.Builder
+	b.Grow(len(s))
+	inSpace := false
+	for i := 0; i < len(s); {
+		r, size := utf8.DecodeRuneInString(s[i:])
+		if unicode.IsSpace(r) {
+			if !inSpace {
+				b.WriteByte(' ')
+			}
+			inSpace = true
+		} else {
+			b.WriteString(s[i : i+size])
+			inSpace = false
+		}
+		i += size
+	}
+	return b.String(), true
+}
+
+// needsCollapse reports whether s has white space other than single ASCII spaces.
+func needsCollapse(s string) bool {
+	inSpace := false
+	for _, r := range s {
+		space := unicode.IsSpace(r)
+		if space && (inSpace || r != ' ') {
+			return true
+		}
+		inSpace = space
+	}
+	return false
+}
+
+// Truncate shortens strings to at most max runes, given as the max parameter,
+// and never cuts a multi-byte character. A missing, non-numeric or negative max
+// fails with ErrInvalidParameter.
+func Truncate(v reflect.Value, params map[string]string) ModifierResult {
+	raw, ok := params["max"]
+	limit, err := strconv.Atoi(raw)
+	if !ok || err != nil || limit < 0 {
+		return invalidParameter(v, "max must be a non-negative integer, got %q", raw)
+	}
+	return ApplyStringModifier(v, func(s string) (string, bool) { return truncateRunes(s, limit) })
+}
+
+func truncateRunes(s string, limit int) (string, bool) {
+	if len(s) <= limit {
+		return s, false
+	}
+	count := 0
+	for i := range s {
+		if count == limit {
+			return s[:i], true
+		}
+		count++
+	}
+	return s, false
+}
+
+// DigitsOnly keeps the ASCII digits 0-9 and removes every other character.
+func DigitsOnly(v reflect.Value, _ map[string]string) ModifierResult {
+	return ApplyStringModifier(v, func(s string) (string, bool) {
+		n := strings.Map(func(r rune) rune {
+			if r >= '0' && r <= '9' {
+				return r
+			}
+			return -1
+		}, s)
+		return n, n != s
+	})
+}
+
+// Email trims an address and lower-cases its domain, the part after the last
+// '@'. The local part keeps its case, which RFC 5321 lets servers distinguish.
+// It does not validate the address; a value without '@' is only trimmed.
+func Email(v reflect.Value, _ map[string]string) ModifierResult {
+	return ApplyStringModifier(v, normalizeEmail)
+}
+
+func normalizeEmail(s string) (string, bool) {
+	n := strings.TrimSpace(s)
+	if local, domain, ok := strings.CutLast(n, "@"); ok {
+		if lower := strings.ToLower(domain); lower != domain {
+			n = local + "@" + lower
+		}
+	}
+	return n, n != s
+}
+
+// NilOnZero sets a pointer to nil when it points to the zero value of its type,
+// such as 0, false, "" or an empty struct. In a pointer chain the innermost
+// pointer is cleared. It generalizes nil_on_empty to every pointer type.
+func NilOnZero(v reflect.Value, _ map[string]string) ModifierResult {
+	return clearInnermost(v, reflect.Value.IsZero)
+}
+
+// EmptyOnNil points nil pointers at new zero values, through the whole pointer
+// chain, so that a *string field always holds a string. It is the inverse of
+// nil_on_zero. A chain that cannot be set is copied, never written.
+func EmptyOnNil(v reflect.Value, _ map[string]string) ModifierResult {
+	if !v.IsValid() || v.Kind() != reflect.Pointer {
+		return ModifierResult{Value: v}
+	}
+	if !v.CanSet() {
+		if root, _, filled, _ := copyChain(v, true); filled {
+			return ModifierResult{Value: root}
+		}
+		return ModifierResult{Value: v}
+	}
+	for p := v; p.Kind() == reflect.Pointer; p = p.Elem() {
+		if p.IsNil() {
+			p.Set(reflect.New(p.Type().Elem()))
+		}
+	}
+	return ModifierResult{Value: v}
+}
+
+// Dedupe removes repeated elements from slices of strings, numbers and
+// booleans, named types included, and keeps the first occurrence of each.
+// Other element types are left unchanged: pointers and interfaces would
+// compare by identity rather than by the values they refer to.
+func Dedupe(v reflect.Value, _ map[string]string) ModifierResult {
+	if !v.IsValid() || v.Kind() != reflect.Slice || !v.CanSet() || v.Len() < 2 {
+		return ModifierResult{Value: v}
+	}
+	switch kind := v.Type().Elem().Kind(); {
+	case kind == reflect.String:
+		dedupe(v, reflect.Value.String)
+	case isBasic(kind):
+		dedupe(v, reflect.Value.Interface)
+	}
+	return ModifierResult{Value: v}
+}
+
+// dedupe replaces v with a copy without repeated keys. A slice without
+// repeats keeps its backing array.
+func dedupe[K comparable](v reflect.Value, key func(reflect.Value) K) {
+	seen := make(map[K]struct{}, v.Len())
+	first := -1
+	for i := range v.Len() {
+		k := key(v.Index(i))
+		if _, ok := seen[k]; ok {
+			first = i
+			break
+		}
+		seen[k] = struct{}{}
+	}
+	if first < 0 {
+		return
+	}
+	n := reflect.MakeSlice(v.Type(), first, v.Len()-1)
+	reflect.Copy(n, v.Slice(0, first))
+	for i := first + 1; i < v.Len(); i++ {
+		x := v.Index(i)
+		k := key(x)
+		if _, ok := seen[k]; ok {
+			continue
+		}
+		seen[k] = struct{}{}
+		n = reflect.Append(n, x)
+	}
+	v.Set(n)
 }

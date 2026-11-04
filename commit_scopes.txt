@@ -14,6 +14,8 @@ normalize                   # Root package: tag-driven normalization of struct f
 modifiers                   # Built-in string modifiers and their registry
 normalizetest               # Test helpers for consumers
 phone                       # Phone-number modifier, nested module
+text                        # Unicode modifiers over golang.org/x/text, nested module
+idna                        # Internationalized domain names over golang.org/x/net, nested module
 
 # Tooling
 devtools                    # Development tool dependencies

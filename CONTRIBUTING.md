@@ -128,12 +128,14 @@ All `.go` files must include the copyright header. Run `make copyright` to add i
 
 ## Modules
 
-The repository holds two Go modules, listed in the Makefile's `MODULES`: the root (`normalize`, `modifiers`, `normalizetest`) and
-`phone` (the phone-number modifier over github.com/nyaruka/phonenumbers). Every Go target runs in each module; run `go` commands for
-`phone` from its directory (or with `go -C phone`). `phone` builds against the checkout through a `replace` directive; `go.work` is not
-committed.
+The repository holds several Go modules, listed in the Makefile's `MODULES`: the root (`normalize`, `modifiers`, `normalizetest`) and a nested module
+for each optional modifier set with third-party dependencies: `phone` (phone numbers over github.com/nyaruka/phonenumbers), `text` (Unicode forms and
+case over golang.org/x/text) and `idna` (internationalized domain names over golang.org/x/net). Every Go target runs in each module; run `go` commands
+for a nested module from its directory (or with `go -C <dir>`). Nested modules build against the checkout through a `replace` directive; `go.work` is
+not committed.
 
-Releases tag the root first (`vX.Y.Z`), then set `phone`'s `require` of the root to that version, commit, and tag `phone/vX.Y.Z`.
+Releases tag the root first (`vX.Y.Z`), then set each nested module's `require` of the root to that version, commit, and tag the module (`phone/vX.Y.Z`,
+`text/vX.Y.Z`, `idna/vX.Y.Z`).
 
 ## Makefile Targets
 

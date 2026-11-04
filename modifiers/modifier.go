@@ -4,7 +4,15 @@
 
 package modifiers
 
-import "reflect"
+import (
+	"errors"
+	"fmt"
+	"reflect"
+)
+
+// ErrInvalidParameter is the cause of a ModifierError for a tag parameter the
+// modifier cannot use.
+var ErrInvalidParameter = errors.New("modifiers: invalid parameter")
 
 // Modifier transforms a reflected field value.
 type Modifier func(reflect.Value, map[string]string) ModifierResult
@@ -38,4 +46,9 @@ func (e *ModifierError) Unwrap() error { return e.Cause }
 type ModifierParams struct {
 	Name   string
 	Params map[string]string
+}
+
+// invalidParameter reports a tag parameter the modifier cannot use; v is left unchanged.
+func invalidParameter(v reflect.Value, format string, args ...any) ModifierResult {
+	return ModifierResult{Value: v, Error: &ModifierError{Cause: fmt.Errorf("%w: "+format, append([]any{ErrInvalidParameter}, args...)...)}}
 }

@@ -8,7 +8,9 @@
 // # Built-ins
 //
 // DefaultRegistry holds trim, lowercase, uppercase, nil_on_empty,
-// remove_bad_symbols and remove_empty_elements.
+// remove_bad_symbols, remove_empty_elements, collapse_spaces, truncate(max=N),
+// digits_only, email, nil_on_zero, empty_on_nil, dedupe, utc,
+// truncate_time(unit=U), clamp(min=A;max=B) and url.
 //
 // # Registry
 //

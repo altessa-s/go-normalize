@@ -35,6 +35,8 @@ body:
         - modifiers
         - normalizetest
         - phone
+        - text
+        - idna
         - devtools
         - ci
         - other

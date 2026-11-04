@@ -7,9 +7,9 @@ MAKEFLAGS      			+= --no-builtin-rules
 CHANGELOG_NEXT_VERSION 	?= $(shell git describe --tags --abbrev=0 2>/dev/null || echo "v0.0.0")
 MODULE         			:= github.com/altessa-s/go-normalize
 # Directories holding a go.mod, root first. Every Go target runs in each one.
-# phone is a separate module so github.com/nyaruka/phonenumbers stays out of
-# the root module's requirements.
-MODULES        			:= . phone
+# phone, text and idna are separate modules so github.com/nyaruka/phonenumbers,
+# golang.org/x/text and golang.org/x/net stay out of the root module's requirements.
+MODULES        			:= . phone text idna
 
 # dupl configuration
 # - DUPL_THRESHOLD: token threshold (higher -> fewer matches)

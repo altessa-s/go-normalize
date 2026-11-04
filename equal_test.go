@@ -33,13 +33,15 @@ func TestEqualValueComparesCompositeValues(t *testing.T) {
 			Func:    func() {},
 		}
 	}
+	// Traversal compares addressable copies; function values need an address.
 	left, right := makeValue(), makeValue()
-	if !equalValue(reflect.ValueOf(left), reflect.ValueOf(right), make(map[valuePair]bool)) {
+	l, r := reflect.ValueOf(&left).Elem(), reflect.ValueOf(&right).Elem()
+	if !equalValue(l, r, make(map[valuePair]bool)) {
 		t.Fatal("equivalent composite values were treated as changed")
 	}
 
 	right.Array[1]++
-	if equalValue(reflect.ValueOf(left), reflect.ValueOf(right), make(map[valuePair]bool)) {
+	if equalValue(l, r, make(map[valuePair]bool)) {
 		t.Fatal("different array elements were treated as equal")
 	}
 }
@@ -130,5 +132,30 @@ func TestEqualValueComparesUnexportedFields(t *testing.T) {
 	}
 	if equalValue(a, reflect.ValueOf(hidden{value: 2}), make(map[valuePair]bool)) {
 		t.Fatal("different unexported fields compared equal")
+	}
+}
+
+func TestEqualFuncsComparesClosures(t *testing.T) {
+	t.Parallel()
+	counter := func(n int) func() int { return func() int { return n } }
+	shared := counter(1)
+	v := struct{ A, B, C func() int }{A: shared, B: shared, C: counter(1)}
+	fields := reflect.ValueOf(&v).Elem()
+	a, b, c := fields.Field(0), fields.Field(1), fields.Field(2)
+	if !equalFuncs(a, b) {
+		t.Fatal("one closure in two fields compared unequal")
+	}
+	if equalFuncs(a, c) {
+		t.Fatal("two closures of one literal compared equal")
+	}
+	if !equalFuncs(reflect.ValueOf(shared), reflect.ValueOf(shared)) {
+		t.Fatal("one closure without an address compared unequal")
+	}
+	if equalFuncs(reflect.ValueOf(shared), reflect.ValueOf(counter(1))) {
+		t.Fatal("two closures without an address compared equal")
+	}
+	hidden := reflect.ValueOf(struct{ f func() int }{f: shared}).Field(0)
+	if equalFuncs(hidden, hidden) {
+		t.Fatal("an unexported function without an address must count as changed")
 	}
 }

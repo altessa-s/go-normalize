@@ -519,3 +519,56 @@ func TestModifierErrorPathThroughMapsAndArrays(t *testing.T) {
 		t.Fatalf("unexpected error context: %+v", modifierErr)
 	}
 }
+
+type closureHolder struct {
+	Name  string `normalize:"trim"`
+	Value func() int
+}
+
+func constant(n int) func() int { return func() int { return n } }
+
+// Normalize replaces Value with another closure of the same function literal;
+// both share their code, so only the closure tells them apart.
+func (h *closureHolder) Normalize() error {
+	h.Value = constant(h.Value() + 1)
+	return nil
+}
+
+func TestNormalizeWritesBackReplacedClosuresInMaps(t *testing.T) {
+	t.Parallel()
+	v := struct{ Items map[string]closureHolder }{Items: map[string]closureHolder{"a": {Name: "x", Value: constant(1)}}}
+	if err := normalize.Normalize(&v); err != nil {
+		t.Fatal(err)
+	}
+	if got := v.Items["a"].Value(); got != 2 {
+		t.Fatalf("replaced closure was not written back: Value() = %d, want 2", got)
+	}
+}
+
+// TestNormalizeKeepsUnchangedFunctionsInInterfaceMaps covers functions held by
+// interface-typed map values, which have no address of their own.
+func TestNormalizeKeepsUnchangedFunctionsInInterfaceMaps(t *testing.T) {
+	t.Parallel()
+	items := map[string]any{"f": func() {}, "g": constant(1)}
+	var wg sync.WaitGroup
+	for range 4 {
+		wg.Go(func() {
+			for range 100 {
+				for _, it := range items {
+					_ = it
+				}
+			}
+		})
+	}
+	for range 100 {
+		if err := normalize.Normalize(&struct{ Items map[string]any }{Items: items}); err != nil {
+			t.Error(err)
+			break
+		}
+	}
+	wg.Wait()
+	nan := map[float64]any{math.NaN(): func() {}}
+	if err := normalize.Normalize(&struct{ Items map[float64]any }{Items: nan}); err != nil {
+		t.Fatalf("an unchanged function under a NaN key needs no write: %v", err)
+	}
+}
