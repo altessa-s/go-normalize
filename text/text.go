@@ -8,11 +8,11 @@ import (
 	"fmt"
 	"reflect"
 
-	"github.com/altessa-s/go-normalize/modifiers"
-
 	"golang.org/x/text/cases"
 	"golang.org/x/text/language"
 	"golang.org/x/text/unicode/norm"
+
+	"github.com/altessa-s/go-normalize/modifiers"
 )
 
 // Register adds nfc, nfkc, fold and title to registry. Registration is

@@ -45,12 +45,12 @@ Thank you for your interest in contributing to go-normalize! This guide will hel
 
 Use the following prefixes:
 
-| Prefix      | Purpose               |
-|-------------|-----------------------|
-| `feat/`     | New features          |
-| `fix/`      | Bug fixes             |
-| `docs/`     | Documentation changes |
-| `refactor/` | Code refactoring      |
+| Prefix | Purpose |
+|--------|---------|
+| `feat/` | New features |
+| `fix/` | Bug fixes |
+| `docs/` | Documentation changes |
+| `refactor/` | Code refactoring |
 
 ## Commit Messages
 
@@ -67,7 +67,8 @@ We follow [Conventional Commits](https://www.conventionalcommits.org/):
 **Types:** `feat`, `fix`, `docs`, `refactor`, `test`, `chore`, `ci`, `perf`, `build`, `style`, `revert`
 
 **Scope** is optional. When present, it must be listed in [`commit_scopes.txt`](commit_scopes.txt). Never use `root`; omit the scope for
-repository-wide changes. Use `!` before the colon for a breaking change.
+repository-wide changes. Use `!` before the colon for a breaking change; a `BREAKING CHANGE:` footer explains it and is rejected without the `!`,
+because the release notes group breaking changes by the subject.
 
 Describe the concrete change and its purpose. Keep the body only when it explains behavior or a decision beyond the subject. Do not include filler,
 work logs, test results, coverage figures or validation summaries. Do not mention agents or AI assistance, add generation signatures, or add agent
@@ -100,21 +101,31 @@ and get no exemption.
 
 ### Formatting
 
-- Run `make fmt` before committing — this runs `gci` with the project's import ordering.
+- Run `make fmt` before committing — this runs `golangci-lint fmt`, whose `gci` formatter applies the project's import ordering (`make fmt-check`
+  reports without rewriting). Generated files follow the same rule: optgen writes them through `gofmt -w` and `make generate` then runs
+  `golangci-lint fmt` over every `*_gen.go`; the standalone `gci` binary is not used.
 - Maximum line length: **156 characters** (enforced by `lll` linter).
+- `wsl_v5` enforces blank lines around blocks and statements, and `godoclint` requires a doc comment on every exported symbol.
+- Test files are formatted like any other file and are linted by `asciicheck`, `copyloopvar`, `goprintffuncname`, `ineffassign`, `misspell`, `modernize`, `predeclared`, `unused`, `whitespace`, `wsl_v5` only; every other linter skips
+  `_test.go` files. Code behind test-only build tags (`integration` and the repository's other test tags) is linted too.
 
 ### Import Ordering
 
-Imports must follow this order (enforced by `gci` via `.golangci.yml`):
+Imports must follow this order (enforced by `gci` via `.golangci.yml`, in this exact order):
 
 1. Standard library
 2. Third-party packages (default)
 3. `google.golang.org`
 4. `golang.org`
-5. `github.com/altessa-s/go-normalize`
-6. `github.com/altessa-s` (other altessa packages)
+5. `github.com/altessa-s` (other altessa packages)
+6. `github.com/altessa-s/go-normalize`
 7. Blank imports
 8. Aliases
+
+### Tests
+
+Tests may use the standard `testing` package alone or [testify](https://github.com/stretchr/testify) (`require` for preconditions, `assert`
+for independent checks); both are fine in library tests.
 
 ### Copyright Headers
 
@@ -134,48 +145,67 @@ case over golang.org/x/text) and `idna` (internationalized domain names over gol
 for a nested module from its directory (or with `go -C <dir>`). Nested modules build against the checkout through a `replace` directive; `go.work` is
 not committed.
 
-A release sets each nested module's `require` of the root to the version being released, commits that, and tags the root and the
-nested modules together on that commit (`vX.Y.Z`, `phone/vX.Y.Z`, `text/vX.Y.Z`, `idna/vX.Y.Z`). The `replace` directive keeps in-repository
-builds on the checkout, so the required version does not have to exist before the tags are pushed.
-
 ## Makefile Targets
 
-| Target                    | Description                                                                                                                    |
-|---------------------------|--------------------------------------------------------------------------------------------------------------------------------|
-| `make fmt`                | Format code and sort imports                                                                                                   |
-| `make lint`               | Tidy, format and run golangci-lint with the repo config (`.golangci.yml`) in every module                                      |
-| `make golangci`           | Run golangci-lint in every module without rewriting files (as CI does)                                                         |
-| `make vet`                | Run go vet and the go fix modernizer check in every module                                                                     |
-| `make build`              | Build all packages in every module (honors `GOOS`/`GOARCH`)                                                                    |
-| `make test`               | Run all tests                                                                                                                  |
-| `make test-verbose`       | Run tests with verbose output                                                                                                  |
-| `make test-race`          | Run tests with race detector                                                                                                   |
-| `make test-shuffle`       | Run tests with randomized order                                                                                                |
-| `make test-coverage`      | Run tests with coverage report                                                                                                 |
-| `make test-all`           | Run tests with race, shuffle, and coverage                                                                                     |
-| `make coverage`           | Run tests with race and shuffle in every module, writing the profile to `coverage.out`                                         |
-| `make coverage-total`     | Print the total statement coverage of `coverage.out`                                                                           |
-| `make test-coverage-func` | Per-package coverage breakdown                                                                                                 |
-| `make test-integration`   | Run unit and integration tests (`-tags integration`) with race detector and shuffle                                            |
-| `make bench`              | Run all benchmarks                                                                                                             |
-| `make bench-count`        | Run benchmarks for benchstat                                                                                                   |
-| `make bench-compare`      | Compare benchmarks with `BASE` (default `origin/develop`); fails on regressions above `BENCH_THRESHOLD`%                       |
-| `make fuzz-list`          | List every fuzz target                                                                                                         |
-| `make fuzz-seed`          | Run fuzz targets over their seed corpus only (no mutation)                                                                     |
-| `make fuzz`               | Fuzz every target for `FUZZTIME` each (`FUZZTIME=30s FUZZPKG=./...`; `FUZZPKG` is a repository path and may name a sub-module) |
-| `make dupl`               | Find code duplication                                                                                                          |
-| `make dupl-check`         | Fail on code duplication                                                                                                       |
-| `make copyright`          | Add copyright headers                                                                                                          |
-| `make generate`           | Build pinned optgen and gci into `bin/` and run `go generate` in every module                                                  |
-| `make tidy`               | Run go mod tidy in every module                                                                                                |
-| `make govulncheck`        | Run govulncheck in every module                                                                                                |
-| `make gosec`              | Run gosec in every module                                                                                                      |
-| `make security-scan`      | Run govulncheck and gosec                                                                                                      |
+| Target | Description |
+|--------|-------------|
+| `make fmt` | Format code and sort imports |
+| `make fmt-check` | Fail when `make fmt` would rewrite a file |
+| `make lint` | Tidy, format and run golangci-lint with the repo config (`.golangci.yml`) in every module |
+| `make golangci` | Run golangci-lint in every module without rewriting files (as CI does) |
+| `make vet` | Run go vet and the go fix modernizer check in every module |
+| `make build` | Build all packages in every module (honors `GOOS`/`GOARCH`) |
+| `make test` | Run all tests |
+| `make test-verbose` | Run tests with verbose output |
+| `make test-race` | Run tests with race detector |
+| `make test-shuffle` | Run tests with randomized order |
+| `make test-coverage` | Run tests with coverage report |
+| `make test-all` | Run tests with race, shuffle, and coverage |
+| `make coverage` | Run tests with race and shuffle in every module, writing the profile to `coverage.out` |
+| `make coverage-total` | Print the total statement coverage of `coverage.out` |
+| `make test-coverage-func` | Per-package coverage breakdown |
+| `make test-integration` | Run unit and integration tests (`-tags integration`) with race detector and shuffle |
+| `make bench` | Run all benchmarks |
+| `make bench-count` | Run benchmarks for benchstat |
+| `make bench-compare` | Compare benchmarks with `BASE` (default `origin/develop`); fails on regressions above `BENCH_THRESHOLD`% |
+| `make fuzz-list` | List every fuzz target |
+| `make fuzz-seed` | Run fuzz targets over their seed corpus only (no mutation) |
+| `make fuzz` | Fuzz every target for `FUZZTIME` each (`FUZZTIME=30s FUZZPKG=./...`; `FUZZPKG` is a repository path and may name a sub-module) |
+| `make dupl` | Find code duplication |
+| `make dupl-check` | Fail on code duplication |
+| `make copyright` | Add copyright headers |
+| `make generate` | Build pinned optgen and golangci-lint into `bin/`, run go generate and format the output |
+| `make generate-check` | Fail when `make generate` changes, adds or removes generated files (as CI does) |
+| `make tidy` | Run go mod tidy in every module |
+| `make govulncheck` | Run govulncheck in every module |
+| `make gosec` | Run gosec in every module |
+| `make security-scan` | Run govulncheck and gosec |
+| `make nested-build-check` | Build every sub-module of `NESTED_CHECK_MODULES` (and its latest released tag) against the root without `replace` directives (a no-op when it is empty) |
+| `make release` | Tag `VERSION` for the root and every nested module, then push the tags (clean `main` equal to `origin/main` only, one push URL for `origin`) |
+| `make print-nested-modules` | Print the nested module directories released with the root |
+
+## Releases
+
+The nested modules `phone`, `text` and `idna` are released together with the root module under one version. Run
+`make release VERSION=vX.Y.Z` on a clean `main` equal to `origin/main` (it fetches first and refuses anything else) with one push URL for `origin`. It checks that none of
+the tags exists locally or on origin, then points the nested `go.mod` files at the new version, commits that, tags `vX.Y.Z` and
+`<module>/vX.Y.Z` for every nested module on one commit and pushes them atomically. When a step after the tag check fails, it deletes the tags
+it created and resets `main` to the commit it started from, and reports both; the atomic push did not change origin. When the push reports a failure, it
+compares the tags on origin with the local ones: it rolls back only when none of them landed, and keeps the local commit and tags when all of
+them landed (the response was lost) or when origin cannot be queried. The release workflow rejects a root tag without matching nested tags, a nested module that requires another version of this
+repository, and a sub-module missing from the Makefile's `NESTED_MODULES`.
+
+Nested modules may import only exported packages of the root module, never `internal/...`, because a consumer can combine a nested module
+release with a newer root release. `make nested-build-check` (run by `make ci` and the CI lint job) builds every sub-module of
+`NESTED_CHECK_MODULES` (the nested modules and the sub-modules released on their own), and the latest released tag of each, against the root
+without the `replace` directives; `NESTED_BUILD_ACCEPT` in the Makefile pins released tags whose breakage is accepted.
 
 ## CI checks
 
-CI requires at least 97% total statement coverage on Linux. Raise this floor as coverage improves; do not lower it to accommodate
-untested changes. The full suite runs with the race detector and shuffled test order.
+CI requires at least 97% total statement coverage on Linux, counted over every package of a module by any of its tests
+(`-coverpkg=./...`). Raise this floor as coverage improves; do not lower it to accommodate untested changes. The full suite runs with the race
+detector and shuffled test order, generated files must match `make generate`, and
+every package is cross-compiled for darwin and windows.
 
 ## Fuzzing
 
