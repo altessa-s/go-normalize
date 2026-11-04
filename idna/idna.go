@@ -6,7 +6,6 @@ package idna
 
 import (
 	"errors"
-	"fmt"
 	"net/url"
 	"reflect"
 	"strings"
@@ -18,14 +17,14 @@ import (
 
 // ErrInvalidDomain identifies a domain that is not a valid internationalized
 // domain name. Errors do not include the value.
-var ErrInvalidDomain = errors.New("domain is invalid")
+var ErrInvalidDomain = errors.New("idna: invalid domain")
 
 // Register adds the idna modifier to registry. Registration is explicit and
-// has no package side effect. A nil registry fails with
-// modifiers.ErrInvalidRegistration.
+// has no package side effect. A nil registry, typed nil pointers included,
+// fails with modifiers.ErrInvalidRegistration.
 func Register(registry modifiers.Registrar) error {
-	if registry == nil {
-		return fmt.Errorf("%w: nil registry", modifiers.ErrInvalidRegistration)
+	if err := modifiers.CheckRegistrar(registry); err != nil {
+		return err
 	}
 
 	return registry.Register("idna", ToASCII)

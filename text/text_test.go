@@ -93,6 +93,11 @@ func TestRegisterThroughNormalize(t *testing.T) {
 		t.Fatalf("Register(nil) = %v, want ErrInvalidRegistration", err)
 	}
 
+	var typedNil *derefRegistrar
+	if err := text.Register(typedNil); !errors.Is(err, modifiers.ErrInvalidRegistration) {
+		t.Fatalf("Register(typed nil) = %v, want ErrInvalidRegistration", err)
+	}
+
 	r := newRegistry()
 
 	type account struct {
@@ -135,4 +140,13 @@ func TestCasersAreNotShared(t *testing.T) {
 	}
 
 	wg.Wait()
+}
+
+// derefRegistrar dereferences its receiver, so calling Register on a typed nil
+// one panics.
+type derefRegistrar struct{ names []string }
+
+func (r *derefRegistrar) Register(name string, _ modifiers.Modifier) error {
+	r.names = append(r.names, name)
+	return nil
 }

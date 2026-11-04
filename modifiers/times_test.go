@@ -54,6 +54,8 @@ func TestTruncateTime(t *testing.T) {
 		{unit: "1s", want: time.Date(2026, 3, 4, 5, 6, 7, 0, time.UTC)},
 		{unit: "15m", want: time.Date(2026, 3, 4, 5, 0, 0, 0, time.UTC)},
 		{unit: "ns", want: at},
+		{unit: ".5s", want: time.Date(2026, 3, 4, 5, 6, 7, 500000000, time.UTC)},
+		{unit: "+1s", want: time.Date(2026, 3, 4, 5, 6, 7, 0, time.UTC)},
 	}
 	truncate := must(modifiers.DefaultRegistry().Get("truncate_time"))
 
@@ -72,7 +74,7 @@ func TestTruncateTime(t *testing.T) {
 		})
 	}
 
-	for _, unit := range []string{"", "0s", "-1s", "fortnight"} {
+	for _, unit := range []string{"", "0s", "-1s", "-s", "+", ".", "fortnight"} {
 		got := at
 
 		out := truncate(reflect.ValueOf(&got).Elem(), map[string]string{"unit": unit})

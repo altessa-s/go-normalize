@@ -16,11 +16,11 @@ import (
 )
 
 // Register adds nfc, nfkc, fold and title to registry. Registration is
-// explicit and has no package side effect. A nil registry fails with
-// modifiers.ErrInvalidRegistration.
+// explicit and has no package side effect. A nil registry, typed nil
+// pointers included, fails with modifiers.ErrInvalidRegistration.
 func Register(registry modifiers.Registrar) error {
-	if registry == nil {
-		return fmt.Errorf("%w: nil registry", modifiers.ErrInvalidRegistration)
+	if err := modifiers.CheckRegistrar(registry); err != nil {
+		return err
 	}
 
 	for _, m := range []struct {

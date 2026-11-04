@@ -32,14 +32,17 @@ func TestArchitecture(t *testing.T) {
 		}
 
 		if entry.IsDir() {
-			if file != root && (strings.HasPrefix(entry.Name(), ".") || entry.Name() == "phone" || entry.Name() == "devtools" || entry.Name() == "docs") {
+			if file == root {
+				return nil
+			}
+			// Hidden directories, testdata and nested modules (phone, text,
+			// idna, devtools) are not part of the root module.
+			if strings.HasPrefix(entry.Name(), ".") || entry.Name() == "testdata" {
 				return filepath.SkipDir
 			}
 
-			if file != root {
-				if _, statErr := os.Stat(filepath.Join(file, "go.mod")); statErr == nil {
-					return filepath.SkipDir
-				}
+			if _, statErr := os.Stat(filepath.Join(file, "go.mod")); statErr == nil {
+				return filepath.SkipDir
 			}
 
 			return nil

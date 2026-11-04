@@ -107,6 +107,52 @@ func TestCloneIsIndependent(t *testing.T) {
 	}
 }
 
+// derefRegistrar dereferences its receiver, so a typed nil one panics.
+type derefRegistrar struct{ names []string }
+
+func (r *derefRegistrar) Register(name string, _ modifiers.Modifier) error {
+	r.names = append(r.names, name)
+	return nil
+}
+
+type mapRegistrar map[string]modifiers.Modifier
+
+func (r mapRegistrar) Register(name string, m modifiers.Modifier) error {
+	r[name] = m
+	return nil
+}
+
+func TestCheckRegistrar(t *testing.T) {
+	t.Parallel()
+
+	var (
+		nilPointer *derefRegistrar
+		nilMap     mapRegistrar
+		nilReg     *modifiers.Registry
+	)
+
+	for name, r := range map[string]modifiers.Registrar{
+		"nil interface": nil,
+		"typed nil":     nilPointer,
+		"nil map":       nilMap,
+		"nil Registry":  nilReg,
+	} {
+		if err := modifiers.CheckRegistrar(r); !errors.Is(err, modifiers.ErrInvalidRegistration) {
+			t.Fatalf("%s: CheckRegistrar = %v, want ErrInvalidRegistration", name, err)
+		}
+	}
+
+	for name, r := range map[string]modifiers.Registrar{
+		"pointer":  &derefRegistrar{},
+		"map":      mapRegistrar{},
+		"registry": modifiers.NewRegistry(),
+	} {
+		if err := modifiers.CheckRegistrar(r); err != nil {
+			t.Fatalf("%s: CheckRegistrar = %v", name, err)
+		}
+	}
+}
+
 func TestRegisterRejectsInvalidRegistrations(t *testing.T) {
 	t.Parallel()
 

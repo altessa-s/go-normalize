@@ -79,7 +79,7 @@ func TestIntegrationNormalizesCustomerAggregate(t *testing.T) {
 	c := newIntegrationCustomer(1)
 	normalizetest.RequireNormalized(t, normalize.Normalize, c)
 
-	if c.Name != "Jane\u200b Doe 1" {
+	if c.Name != "Jane Doe 1" {
 		t.Errorf("Name = %q", c.Name)
 	}
 
@@ -111,7 +111,7 @@ func TestIntegrationNormalizesCustomerAggregate(t *testing.T) {
 		t.Errorf("Extra = %+v", c.Extra)
 	}
 
-	if c.Display != "Jane\u200b Doe 1 (BERLIN)" {
+	if c.Display != "Jane Doe 1 (BERLIN)" {
 		t.Errorf("Display = %q", c.Display)
 	}
 
@@ -151,7 +151,7 @@ func TestIntegrationConcurrentCallsShareRegistryAndPlans(t *testing.T) {
 					return
 				}
 
-				if want := "Jane\u200b Doe " + strconv.Itoa(w*perWorker+i); c.Name != want {
+				if want := "Jane Doe " + strconv.Itoa(w*perWorker+i); c.Name != want {
 					errs <- errors.New("got " + c.Name + ", want " + want)
 					return
 				}

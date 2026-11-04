@@ -8,6 +8,7 @@ import (
 	"reflect"
 	"time"
 	"unicode"
+	"unicode/utf8"
 )
 
 // UTC converts time.Time values to UTC; the instant is unchanged.
@@ -18,10 +19,11 @@ func UTC(v reflect.Value, _ map[string]string) Result {
 }
 
 // TruncateTime rounds time.Time values down to a multiple of the unit
-// parameter, a duration such as 1s, 500ms or 1h; a bare unit such as s or ms
-// means one of it. Rounding counts from the zero time, as time.Time.Truncate
-// does. Use it to match the precision of a store, such as microseconds for
-// PostgreSQL. A missing or non-positive unit fails with ErrInvalidParameter.
+// parameter, a duration such as 1s, 500ms, .5s or 1h; a bare unit such as s,
+// ms or us means one of it. Rounding counts from the zero time, as
+// time.Time.Truncate does. Use it to match the precision of a store, such as
+// microseconds for PostgreSQL. A missing or non-positive unit fails with
+// ErrInvalidParameter.
 func TruncateTime(v reflect.Value, params map[string]string) Result {
 	raw := params["unit"]
 
@@ -36,8 +38,10 @@ func TruncateTime(v reflect.Value, params map[string]string) Result {
 	})
 }
 
+// parseUnit parses a duration; a bare unit such as ms, one starting with a
+// letter, means one of it.
 func parseUnit(s string) (time.Duration, error) {
-	if s != "" && !unicode.IsDigit(rune(s[0])) {
+	if r, _ := utf8.DecodeRuneInString(s); unicode.IsLetter(r) {
 		s = "1" + s
 	}
 

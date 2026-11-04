@@ -28,8 +28,8 @@ literals, ports, paths, queries and fragments are kept. Combine it with the buil
 
 ## Key types
 
-| Identifier         | Description                                                                                           |
-|--------------------|-------------------------------------------------------------------------------------------------------|
-| `Register`         | Adds the `idna` modifier to a `modifiers.Registrar`                                                   |
-| `ToASCII`          | The modifier; applies to `string` values and pointers to them                                         |
+| Identifier         | Description                                                                                   |
+|--------------------|-----------------------------------------------------------------------------------------------|
+| `Register`         | Adds the `idna` modifier to a `modifiers.Registrar`                                           |
+| `ToASCII`          | The modifier; applies to `string` values and pointers to them                                 |
 | `ErrInvalidDomain` | Cause of the `*modifiers.Error` for a domain that is not a valid IDN; the value is not echoed |

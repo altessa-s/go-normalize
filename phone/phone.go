@@ -29,12 +29,12 @@ var separators = strings.NewReplacer(" ", "", "-", "", "(", "", ")", "", ".", ""
 // Register adds the phone modifier to registry. defaultRegion is the ISO
 // 3166-1 alpha-2 region, in any case, used for numbers written without a
 // country code when the tag names no region; there is no implicit default.
-// Registration is explicit and has no package side effect. A nil registry
-// fails with modifiers.ErrInvalidRegistration and an unknown region with
-// ErrUnsupportedRegion.
+// Registration is explicit and has no package side effect. A nil registry,
+// typed nil pointers included, fails with modifiers.ErrInvalidRegistration
+// and an unknown region with ErrUnsupportedRegion.
 func Register(registry modifiers.Registrar, defaultRegion string) error {
-	if registry == nil {
-		return fmt.Errorf("%w: nil registry", modifiers.ErrInvalidRegistration)
+	if err := modifiers.CheckRegistrar(registry); err != nil {
+		return err
 	}
 
 	m, err := New(defaultRegion)

@@ -24,12 +24,12 @@ err := normalize.NormalizeWithRegistry(&account, registry)
 
 ## Modifiers
 
-| Name               | Effect                                                                                                   |
-|--------------------|----------------------------------------------------------------------------------------------------------|
-| `nfc`              | Canonical composition: a letter plus a combining mark becomes the precomposed letter; safe on any text   |
-| `nfkc`             | Compatibility composition: also maps full-width letters, ligatures and superscripts to plain forms       |
-| `fold`             | Unicode case folding for caseless keys (`Straße` and `STRASSE` become `strasse`); not for display        |
-| `title(lang=xx)`   | Title case by the rules of a BCP 47 tag (`nl`: `IJsland`, `tr`: `İstanbul`); language neutral without it |
+| Name             | Effect                                                                                                   |
+|------------------|----------------------------------------------------------------------------------------------------------|
+| `nfc`            | Canonical composition: a letter plus a combining mark becomes the precomposed letter; safe on any text   |
+| `nfkc`           | Compatibility composition: also maps full-width letters, ligatures and superscripts to plain forms       |
+| `fold`           | Unicode case folding for caseless keys (`Straße` and `STRASSE` become `strasse`); not for display        |
+| `title(lang=xx)` | Title case by the rules of a BCP 47 tag (`nl`: `IJsland`, `tr`: `İstanbul`); language neutral without it |
 
 All four apply to `string` values and pointers to them, named types included. An invalid `lang` fails with `modifiers.ErrInvalidParameter`.
 Use `nfc` on text that is compared, indexed or kept unique; use `nfkc` and `fold` for identifiers and search keys, since they change how text

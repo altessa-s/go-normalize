@@ -5,7 +5,6 @@
 package modifiers_test
 
 import (
-	"fmt"
 	"reflect"
 	"strings"
 	"sync"
@@ -190,45 +189,6 @@ func TestModifierEdgeCases(t *testing.T) {
 
 	if err := registry.Register("x", func(reflect.Value, map[string]string) modifiers.Result { return modifiers.Result{} }); err == nil {
 		t.Fatal("a nil registry accepted a registration")
-	}
-}
-
-func TestRemoveBadSymbolsPreservesLegacyUnicodeSet(t *testing.T) {
-	t.Parallel()
-
-	bad := []rune{
-		'\u0340', '\u0341', '\u17a3', '\u17d3', '\u2028', '\u2029',
-		'\u202a', '\u202b', '\u202c', '\u202d', '\u202e',
-		'\u206a', '\u206b', '\u206c', '\u206d', '\u206e', '\u206f',
-		'\ufff9', '\ufffa', '\ufffb', '\ufeff', '\ufffc',
-		'\U0001d173', '\U0001d17a', '\U000e0000', '\U000e007f',
-	}
-	remove := must(modifiers.DefaultRegistry().Get("remove_bad_symbols"))
-
-	for _, r := range bad {
-		t.Run(fmt.Sprintf("U+%04X", r), func(t *testing.T) {
-			input := "a" + string(r) + "b"
-
-			value := reflect.ValueOf(&input).Elem()
-			if result := remove(value, nil); result.Err != nil {
-				t.Fatal(result.Err)
-			}
-
-			if input != "ab" {
-				t.Fatalf("U+%04X was not removed: %q", r, input)
-			}
-		})
-	}
-
-	allBad := string([]rune{'\u0340', '\u0341'})
-
-	value := reflect.ValueOf(&allBad).Elem()
-	if result := remove(value, nil); result.Err != nil {
-		t.Fatal(result.Err)
-	}
-
-	if allBad != string([]rune{'\u0340', '\u0341'}) {
-		t.Fatalf("legacy behavior should preserve a nonempty string that sanitizes to empty: %q", allBad)
 	}
 }
 

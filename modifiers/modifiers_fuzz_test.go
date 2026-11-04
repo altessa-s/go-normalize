@@ -9,6 +9,7 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+	"unicode"
 	"unicode/utf8"
 
 	"github.com/altessa-s/go-normalize/modifiers"
@@ -31,6 +32,7 @@ func FuzzStringModifiers(f *testing.F) {
 	f.Add("\u0430\U0001f600b", 2)
 	f.Add(" HTTPS://User@Example.COM:443/a?b=C#D ", 0)
 	f.Add("http://[::1]:80", 0)
+	f.Add("\U0001f3f4\U000e0067\U000e0062\U000e0065\U000e006e\U000e0067\U000e007f\U0001f3f4\U000e0031\U000e007f", 0)
 
 	r := modifiers.DefaultRegistry()
 	get := func(name string) modifiers.Modifier {
@@ -42,6 +44,7 @@ func FuzzStringModifiers(f *testing.F) {
 		return m
 	}
 	collapse, truncate, digits, email, urlModifier := get("collapse_spaces"), get("truncate"), get("digits_only"), get("email"), get("url")
+	removeBad := get("remove_bad_symbols")
 
 	f.Fuzz(func(t *testing.T, s string, limit int) {
 		valid := utf8.ValidString(s)
@@ -53,6 +56,15 @@ func FuzzStringModifiers(f *testing.F) {
 
 		if again := applyFuzz(t, collapse, nil, collapsed); again != collapsed {
 			t.Fatalf("collapse_spaces is not idempotent: %q -> %q", collapsed, again)
+		}
+
+		cleaned := applyFuzz(t, removeBad, nil, s)
+		if again := applyFuzz(t, removeBad, nil, cleaned); again != cleaned || !utf8.ValidString(cleaned) {
+			t.Fatalf("remove_bad_symbols(%+q) = %+q, again %+q", s, cleaned, again)
+		}
+
+		if strings.ContainsFunc(cleaned, func(r rune) bool { return unicode.In(r, unicode.Bidi_Control, unicode.Cc) }) {
+			t.Fatalf("remove_bad_symbols(%+q) = %+q keeps a control", s, cleaned)
 		}
 
 		limit = min(max(limit, 0), 64)

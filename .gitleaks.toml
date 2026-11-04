@@ -14,7 +14,7 @@ useDefault = true
 [allowlist]
 description = "Verified synthetic fixtures and documentation placeholders"
 paths = [
-    # Claude Code tooling artifacts: kept out of the tree, may contain
+    # Local AI tooling artifacts: ignored by .gitignore, may contain
     # documentation examples.
     '''\.claude/.*''',
 ]

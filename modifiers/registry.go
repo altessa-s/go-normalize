@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"maps"
+	"reflect"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -21,6 +22,25 @@ var ErrInvalidRegistration = errors.New("modifiers: invalid registration")
 // Register functions of the phone, text and idna modules take one.
 type Registrar interface {
 	Register(name string, modifier Modifier) error
+}
+
+// CheckRegistrar returns nil when r can take registrations. A nil interface
+// and a nil pointer, map, slice, func or channel behind the interface fail with
+// ErrInvalidRegistration, since calling Register on them could panic. The
+// Register functions of the optional modules call it first.
+func CheckRegistrar(r Registrar) error {
+	if r == nil {
+		return fmt.Errorf("%w: nil registrar", ErrInvalidRegistration)
+	}
+
+	switch v := reflect.ValueOf(r); v.Kind() { //nolint:exhaustive // only these kinds can be nil
+	case reflect.Pointer, reflect.Map, reflect.Slice, reflect.Func, reflect.Chan, reflect.Interface, reflect.UnsafePointer:
+		if v.IsNil() {
+			return fmt.Errorf("%w: nil %s registrar", ErrInvalidRegistration, v.Type())
+		}
+	}
+
+	return nil
 }
 
 // Registry stores modifier functions and is safe for concurrent use. Lookups

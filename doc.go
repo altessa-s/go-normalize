@@ -17,8 +17,10 @@
 //
 // # Traversal
 //
-// Normalize follows pointers, slices, arrays, maps and interfaces and stops at
-// cycles. Map values are normalized as copies and written back only when they
+// Normalize visits exported fields and follows pointers, slices, arrays, maps
+// and interfaces, stopping at cycles. It also descends into unexported
+// embedded structs and pointers to them, whose exported fields are promoted;
+// errors name such fields as if they belonged to the outer struct. Map values are normalized as copies and written back only when they
 // change. A struct whose pointer implements CustomNormalizer has its Normalize
 // method called after its tagged fields. The fields to visit and their parsed
 // clauses are computed once per struct type.
@@ -33,5 +35,6 @@
 //
 // ErrInvalidInput, ErrModifierNotFound and ErrNonReflexiveMapKey report
 // misuse; modifier failures are *modifiers.Error values carrying the
-// field path. Map keys appear in paths as {key}.
+// field path, including a result of the wrong type, reported as
+// ErrResultType. Map keys appear in paths as {key}.
 package normalize

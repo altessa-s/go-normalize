@@ -62,7 +62,7 @@ func (w *walker) walk(v reflect.Value) error {
 
 		return w.walk(v.Elem())
 	case reflect.Struct:
-		return w.walkStruct(v)
+		return w.walkStruct(v, true)
 	case reflect.Slice:
 		return w.walkSlice(v)
 	case reflect.Array:
@@ -171,16 +171,42 @@ func (w *walker) walkMap(v reflect.Value) error {
 	return nil
 }
 
-func (w *walker) walkStruct(v reflect.Value) error {
+// walkEmbedded walks an embedded struct, or the struct an embedded pointer
+// points to, without calling its CustomNormalizer.
+func (w *walker) walkEmbedded(v reflect.Value) error {
+	if v.Kind() == reflect.Pointer {
+		if v.IsNil() {
+			return nil
+		}
+
+		key := visit{typ: v.Type(), ptr: v.Pointer(), kind: reflect.Pointer}
+		if !w.enter(key) {
+			return nil
+		}
+		defer w.leave(key)
+
+		v = v.Elem()
+	}
+
+	return w.walkStruct(v, false)
+}
+
+// walkStruct normalizes the planned fields of v and then, when custom is set,
+// calls its CustomNormalizer.
+func (w *walker) walkStruct(v reflect.Value, custom bool) error {
 	plan := planFor(v.Type())
 	for i := range plan.fields {
 		f := &plan.fields[i]
 		if err := w.walkField(f, v.Field(f.index)); err != nil {
+			if f.promoted {
+				return err
+			}
+
 			return within(err, segment{name: f.name})
 		}
 	}
 
-	if !plan.custom || !v.CanAddr() || !v.Addr().CanInterface() {
+	if !custom || !plan.custom || !v.CanAddr() || !v.Addr().CanInterface() {
 		return nil
 	}
 
@@ -209,7 +235,10 @@ func (w *walker) walkField(f *fieldPlan, fv reflect.Value) error {
 		}
 	}
 
-	if f.traverse {
+	switch {
+	case f.traverse && f.outerCustom:
+		return w.walkEmbedded(fv)
+	case f.traverse:
 		return w.walk(fv)
 	}
 
@@ -226,18 +255,32 @@ func (w *walker) apply(f *fieldPlan, fv reflect.Value) error {
 		// Modifiers may keep or change their parameters; the plan's copy stays intact.
 		out := m(fv, maps.Clone(clause.Params))
 		if out.Err != nil {
-			modifierErr := &modifiers.Error{Modifier: clause.Name, Field: f.name, Err: out.Err}
-
-			return failAt(func(path string) error {
-				modifierErr.Path = path
-				return modifierErr
-			})
+			return modifierFailure(clause.Name, f.name, out.Err)
 		}
 
-		if out.Value.IsValid() && fv.CanSet() && out.Value.Type().AssignableTo(fv.Type()) {
+		if !out.Value.IsValid() {
+			continue
+		}
+
+		if !out.Value.Type().AssignableTo(fv.Type()) {
+			return modifierFailure(clause.Name, f.name, fmt.Errorf("%w: got %s, want %s", ErrResultType, out.Value.Type(), fv.Type()))
+		}
+
+		if fv.CanSet() {
 			fv.Set(out.Value)
 		}
 	}
 
 	return nil
+}
+
+// modifierFailure reports err from the named modifier at field as an
+// *modifiers.Error whose path is filled in on the way up.
+func modifierFailure(modifier, field string, err error) error {
+	modifierErr := &modifiers.Error{Modifier: modifier, Field: field, Err: err}
+
+	return failAt(func(path string) error {
+		modifierErr.Path = path
+		return modifierErr
+	})
 }

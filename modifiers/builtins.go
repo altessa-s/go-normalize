@@ -102,40 +102,6 @@ func keepElement(v reflect.Value, pointer bool) bool {
 	return strings.TrimSpace(v.String()) != ""
 }
 
-// RemoveBadSymbols removes control and directional formatting characters.
-func RemoveBadSymbols(v reflect.Value, _ map[string]string) Result {
-	return ApplyString(v, func(s string) (string, bool) {
-		n := strings.Map(func(r rune) rune {
-			if isBadSymbol(r) {
-				return -1
-			}
-
-			return r
-		}, s)
-		if n == "" && s != "" {
-			return s, false
-		}
-
-		return n, n != s
-	})
-}
-
-func isBadSymbol(r rune) bool {
-	if unicode.IsControl(r) {
-		return true
-	}
-
-	switch r {
-	case '\u0340', '\u0341', '\u17a3', '\u17d3',
-		'\u2028', '\u2029', '\u202a', '\u202b', '\u202c', '\u202d', '\u202e',
-		'\u206a', '\u206b', '\u206c', '\u206d', '\u206e', '\u206f',
-		'\ufff9', '\ufffa', '\ufffb', '\ufeff', '\ufffc':
-		return true
-	}
-
-	return r >= 0x1d173 && r <= 0x1d17a || r >= 0xe0000 && r <= 0xe007f
-}
-
 // CollapseSpaces replaces every run of white space, as defined by
 // unicode.IsSpace, with a single ASCII space. It does not trim; combine it with
 // trim for that. Bytes that are not valid UTF-8 are kept as they are.

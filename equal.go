@@ -71,9 +71,10 @@ func equalValue(a, b reflect.Value, seen map[valuePair]bool) bool {
 }
 
 // equalFuncs reports whether two function values are the same closure. Code
-// pointers cannot tell: closures of one literal share their code, and since Go
-// 1.27 the compiler may share code between literals. A function value points to
-// its closure, the code together with the captured variables, so equal closure
+// pointers cannot tell: every closure created from one function literal runs
+// the same code whatever it captured, and the language does not promise that
+// distinct functions have distinct code. A function value points to its
+// closure, the code together with the captured variables, so equal closure
 // pointers mean the same function. When a closure pointer cannot be read, the
 // values count as different, so a change is never lost.
 func equalFuncs(a, b reflect.Value) bool {
@@ -164,7 +165,7 @@ func equalMaps(a, b reflect.Value, seen map[valuePair]bool) bool {
 	}
 
 	if a.Len() != b.Len() {
-		return a.IsNil()
+		return false
 	}
 
 	p := valuePair{a: uintptr(a.UnsafePointer()), b: uintptr(b.UnsafePointer()), typ: a.Type()}

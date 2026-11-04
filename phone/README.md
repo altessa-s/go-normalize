@@ -24,12 +24,12 @@ err := normalize.NormalizeWithRegistry(&contact, registry)
 
 ## Key types
 
-| Identifier             | Description                                                                                        |
-|------------------------|----------------------------------------------------------------------------------------------------|
-| `Register`             | Adds the `phone` modifier with a required default region to a `modifiers.Registrar`                |
-| `New`                  | Returns the modifier for a default region, for registering under another name                      |
-| `ErrInvalidPhone`      | Cause of the `*modifiers.Error` for numbers that do not parse or are invalid for the region        |
-| `ErrUnsupportedRegion` | A default or tag region without phone number metadata                                              |
+| Identifier             | Description                                                                                 |
+|------------------------|---------------------------------------------------------------------------------------------|
+| `Register`             | Adds the `phone` modifier with a required default region to a `modifiers.Registrar`         |
+| `New`                  | Returns the modifier for a default region, for registering under another name               |
+| `ErrInvalidPhone`      | Cause of the `*modifiers.Error` for numbers that do not parse or are invalid for the region |
+| `ErrUnsupportedRegion` | A default or tag region without phone number metadata                                       |
 
 ## Parameters
 
@@ -40,3 +40,9 @@ err := normalize.NormalizeWithRegistry(&contact, registry)
 The modifier formats `string` values and pointer chains ending in one, named types included, in E.164. Spaces, `-`, `(`, `)`, `.` and `_`
 are removed before parsing; empty values are left as they are. Results, including failures, are kept in a bounded FIFO cache of 4096
 entries; inputs longer than 256 bytes with their region are not cached.
+
+## License
+
+The modifier relies on [`github.com/nyaruka/phonenumbers`](https://github.com/nyaruka/phonenumbers), MIT licensed, which embeds phone
+number metadata generated from Google's [libphonenumber](https://github.com/google/libphonenumber) under the Apache License 2.0. Binaries
+that include this module distribute that metadata, so carry its notice along with the MIT notice of go-normalize.

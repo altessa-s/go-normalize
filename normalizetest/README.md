@@ -8,9 +8,9 @@ Test helpers for consumers of go-normalize.
 
 ## Key types
 
-| Identifier          | Description                                                       |
-|---------------------|-------------------------------------------------------------------|
-| `RequireNormalized` | Calls a normalize function and fails the test with its error      |
+| Identifier          | Description                                                  |
+|---------------------|--------------------------------------------------------------|
+| `RequireNormalized` | Calls a normalize function and fails the test with its error |
 
 ## Usage
 

@@ -74,6 +74,11 @@ func TestRegisterThroughNormalize(t *testing.T) {
 		t.Fatalf("Register(nil) = %v, want ErrInvalidRegistration", err)
 	}
 
+	var typedNil *derefRegistrar
+	if err := idna.Register(typedNil); !errors.Is(err, modifiers.ErrInvalidRegistration) {
+		t.Fatalf("Register(typed nil) = %v, want ErrInvalidRegistration", err)
+	}
+
 	r := modifiers.DefaultRegistry()
 	if err := idna.Register(r); err != nil {
 		t.Fatal(err)
@@ -99,4 +104,13 @@ func TestRegisterThroughNormalize(t *testing.T) {
 	if modifierErr, ok := errors.AsType[*modifiers.Error](err); !ok || modifierErr.Path != "Website" || !errors.Is(err, idna.ErrInvalidDomain) {
 		t.Fatalf("unexpected error: %v", err)
 	}
+}
+
+// derefRegistrar dereferences its receiver, so calling Register on a typed nil
+// one panics.
+type derefRegistrar struct{ names []string }
+
+func (r *derefRegistrar) Register(name string, _ modifiers.Modifier) error {
+	r.names = append(r.names, name)
+	return nil
 }

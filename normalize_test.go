@@ -683,3 +683,32 @@ func TestNormalizeKeepsUnchangedFunctionsInInterfaceMaps(t *testing.T) {
 		t.Fatalf("an unchanged function under a NaN key needs no write: %v", err)
 	}
 }
+
+func TestModifierResultOfWrongTypeFails(t *testing.T) {
+	t.Parallel()
+
+	r := modifiers.NewRegistry()
+	_ = r.Register("number", func(reflect.Value, map[string]string) modifiers.Result {
+		return modifiers.Result{Value: reflect.ValueOf(42)}
+	})
+	_ = r.Register("keep", func(reflect.Value, map[string]string) modifiers.Result {
+		return modifiers.Result{}
+	})
+
+	type input struct {
+		Kept string `normalize:"keep"`
+		Name string `normalize:"number"`
+	}
+
+	value := input{Kept: "k", Name: "n"}
+	err := normalize.NormalizeWithRegistry(&value, r)
+
+	modifierErr, ok := errors.AsType[*modifiers.Error](err)
+	if !ok || !errors.Is(err, normalize.ErrResultType) || modifierErr.Path != "Name" || modifierErr.Modifier != "number" {
+		t.Fatalf("got %v, want ErrResultType at Name", err)
+	}
+
+	if value.Kept != "k" || value.Name != "n" {
+		t.Fatalf("fields changed: %+v", value)
+	}
+}

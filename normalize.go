@@ -24,7 +24,25 @@ var ErrModifierNotFound = errors.New("normalize: modifier not found")
 // cannot be looked up again, such as a NaN floating-point key.
 var ErrNonReflexiveMapKey = errors.New("normalize: cannot update map value with non-reflexive key")
 
-// CustomNormalizer can provide additional normalization after tagged fields.
+// ErrResultType identifies a modifier result whose value cannot be assigned
+// to the field. It is the cause of a *modifiers.Error.
+var ErrResultType = errors.New("normalize: modifier returned a value of the wrong type")
+
+// CustomNormalizer adds normalization that tags cannot express. When the
+// pointer to a visited struct implements it, Normalize is called after the
+// struct's tagged fields and their nested values, and its error is returned
+// with the struct's path.
+//
+// The interface is satisfied implicitly: any struct type whose pointer has a
+// method Normalize() error is treated as a CustomNormalizer, even when the
+// method was written for another purpose; name the method differently when it
+// should not run during normalization.
+//
+// As in Go method promotion, the method of an embedded struct belongs to the
+// outer struct: when the outer struct is a CustomNormalizer, through
+// promotion or its own method, only the outer struct's Normalize is called,
+// once, and an overriding method calls the embedded one itself if it needs
+// to.
 type CustomNormalizer interface{ Normalize() error }
 
 // builtins is the registry Normalize resolves modifiers in. It is a private
