@@ -1,0 +1,20 @@
+# Commit Scopes for go-normalize
+# Use these scopes in conventional commits: type(scope): description
+# The scope is optional: omit it for repository-wide changes. Never use `root`.
+# Only the first word of a non-comment line is a scope.
+# Example: feat(phone): accept a default region option
+
+# Repository scopes
+deps                        # Dependency updates (Dependabot writes build(deps): bump ...)
+README                      # Root README
+docs                        # Documentation
+
+# Packages
+normalize                   # Root package: tag-driven normalization of struct fields
+modifiers                   # Built-in string modifiers and their registry
+normalizetest               # Test helpers for consumers
+phone                       # Phone-number modifier, nested module
+
+# Tooling
+devtools                    # Development tool dependencies
+ci                          # GitHub Actions workflows and scripts
