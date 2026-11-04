@@ -5,11 +5,10 @@
 package phone
 
 import (
+	"cmp"
 	"errors"
 	"reflect"
-	"strconv"
 	"strings"
-	"sync"
 
 	"github.com/nyaruka/phonenumbers"
 
@@ -19,8 +18,25 @@ import (
 // ErrInvalidPhone identifies an invalid phone number.
 var ErrInvalidPhone = errors.New("phone number is invalid")
 
+// defaultRegion applies when the tag names no region.
+const defaultRegion = "RU"
+
+// separators are the formatting characters removed before parsing.
+var separators = strings.NewReplacer(" ", "", "-", "", "(", "", ")", "", ".", "", "_", "")
+
+// Registrar accepts modifier registrations. *modifiers.Registry implements it.
+type Registrar interface {
+	Register(name string, modifier modifiers.Modifier)
+}
+
 // Register adds the phone modifier to registry. Registration is explicit and has no package side effect.
-func Register(registry *modifiers.Registry) { registry.Register("phone", NormalizePhone) }
+// A nil registry is ignored.
+func Register(registry Registrar) {
+	if registry == nil {
+		return
+	}
+	registry.Register("phone", NormalizePhone)
+}
 
 // NormalizePhone converts a valid phone number to E.164 form. Region defaults to RU.
 func NormalizePhone(v reflect.Value, params map[string]string) modifiers.ModifierResult {
@@ -44,15 +60,10 @@ func NormalizePhone(v reflect.Value, params map[string]string) modifiers.Modifie
 	if s == "" {
 		return modifiers.ModifierResult{Value: v}
 	}
-	region := strings.ToUpper(params["region"])
-	if region == "" {
-		region = "RU"
-	}
-	keyLength := len(region) + len(s) + len(strconv.Itoa(len(region))) + 1
-	cacheable := keyLength <= maxPhoneCacheKeyLength
-	var key string
+	region := cmp.Or(strings.ToUpper(params["region"]), defaultRegion)
+	key := cacheKey{region: region, number: s}
+	cacheable := len(region)+len(s) <= maxPhoneCacheKeyLength
 	if cacheable {
-		key = phoneCacheKey(region, s)
 		if got, ok := phoneCache.get(key); ok {
 			if got.err {
 				return fail(v)
@@ -60,8 +71,7 @@ func NormalizePhone(v reflect.Value, params map[string]string) modifiers.Modifie
 			return set(v, got.value, ptr)
 		}
 	}
-	cleaned := strings.NewReplacer(" ", "", "-", "", "(", "", ")", "", ".", "", "_", "").Replace(s)
-	n, err := phonenumbers.Parse(cleaned, region)
+	n, err := phonenumbers.Parse(separators.Replace(s), region)
 	if err != nil || !phonenumbers.IsValidNumber(n) {
 		if cacheable {
 			phoneCache.put(key, cacheEntry{err: true})
@@ -75,11 +85,6 @@ func NormalizePhone(v reflect.Value, params map[string]string) modifiers.Modifie
 	return set(v, out, ptr)
 }
 
-func phoneCacheKey(region, number string) string {
-	// Length-prefix the region so arbitrary parameter strings cannot collide
-	// across the separator with a different region/number pair.
-	return strconv.Itoa(len(region)) + ":" + region + number
-}
 func fail(v reflect.Value) modifiers.ModifierResult {
 	return modifiers.ModifierResult{Value: v, Error: &modifiers.ModifierError{ModifierName: "phone", Cause: ErrInvalidPhone}}
 }
@@ -104,43 +109,3 @@ func set(v reflect.Value, s string, ptr bool) modifiers.ModifierResult {
 	x.SetString(s)
 	return modifiers.ModifierResult{Value: x}
 }
-
-const phoneCacheCapacity = 4096
-
-// Large inputs are parsed normally but are not retained in the cache.
-const maxPhoneCacheKeyLength = 256
-
-type cacheEntry struct {
-	value string
-	err   bool
-}
-type boundedCache struct {
-	mu   sync.Mutex
-	data map[string]cacheEntry
-	keys []string
-	cap  int
-}
-
-func newCache() *boundedCache {
-	return &boundedCache{data: make(map[string]cacheEntry), cap: phoneCacheCapacity}
-}
-func (c *boundedCache) get(k string) (cacheEntry, bool) {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	v, ok := c.data[k]
-	return v, ok
-}
-func (c *boundedCache) put(k string, v cacheEntry) {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	if _, ok := c.data[k]; !ok {
-		if len(c.keys) >= c.cap {
-			delete(c.data, c.keys[0])
-			c.keys = c.keys[1:]
-		}
-		c.keys = append(c.keys, k)
-	}
-	c.data[k] = v
-}
-
-var phoneCache = newCache()

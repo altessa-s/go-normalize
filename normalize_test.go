@@ -9,6 +9,7 @@ import (
 	"math"
 	"reflect"
 	"strings"
+	"sync"
 	"testing"
 
 	"github.com/altessa-s/go-normalize"
@@ -233,18 +234,6 @@ func TestCustomNormalizerRunsAfterTaggedFields(t *testing.T) {
 		}
 	}
 }
-func BenchmarkNormalizeFlat(b *testing.B) {
-	type row struct {
-		A string `normalize:"trim,lowercase"`
-		B string `normalize:"uppercase"`
-	}
-	for b.Loop() {
-		v := row{A: " x ", B: "y"}
-		if err := normalize.Normalize(&v); err != nil {
-			b.Fatal(err)
-		}
-	}
-}
 func FuzzParseModifier(f *testing.F) {
 	f.Add("phone(region=US)")
 	f.Add("trim")
@@ -343,22 +332,6 @@ func TestPhoneTagRequiresRegistration(t *testing.T) {
 		t.Fatalf("got %v", err)
 	}
 }
-func BenchmarkNormalizeNested(b *testing.B) {
-	type leaf struct {
-		Value string `normalize:"trim,uppercase"`
-	}
-	type item struct {
-		Leaf   *leaf
-		Values []leaf
-	}
-	type record struct{ Items []item }
-	for b.Loop() {
-		v := record{Items: []item{{Leaf: &leaf{Value: " x "}, Values: []leaf{{Value: " y "}}}}}
-		if err := normalize.Normalize(&v); err != nil {
-			b.Fatal(err)
-		}
-	}
-}
 
 func TestMapKeyIsRedactedFromErrorPath(t *testing.T) {
 	t.Parallel()
@@ -369,5 +342,180 @@ func TestMapKeyIsRedactedFromErrorPath(t *testing.T) {
 	err := normalize.Normalize(&struct{ Items map[string]value }{Items: input})
 	if err == nil || strings.Contains(err.Error(), "private-key") {
 		t.Fatalf("map key leaked or error missing: %v", err)
+	}
+}
+
+type staticSource map[string]modifiers.Modifier
+
+func (s staticSource) Get(name string) (modifiers.Modifier, bool) {
+	m, ok := s[name]
+	return m, ok
+}
+
+func TestNormalizeWithCustomModifierSource(t *testing.T) {
+	t.Parallel()
+	source := staticSource{"shout": func(v reflect.Value, _ map[string]string) modifiers.ModifierResult {
+		return modifiers.ApplyStringModifier(v, func(s string) (string, bool) { return strings.ToUpper(s) + "!", true })
+	}}
+	v := struct {
+		Text string `normalize:"shout"`
+	}{Text: "hi"}
+	if err := normalize.NormalizeWithRegistry(&v, source); err != nil {
+		t.Fatal(err)
+	}
+	if v.Text != "HI!" {
+		t.Fatalf("got %q", v.Text)
+	}
+}
+
+func TestNormalizeWithNilRegistry(t *testing.T) {
+	t.Parallel()
+	untagged := struct{ Text string }{Text: " x "}
+	if err := normalize.NormalizeWithRegistry(&untagged, nil); err != nil {
+		t.Fatalf("untagged value with nil registry: %v", err)
+	}
+	tagged := struct {
+		Text string `normalize:"trim"`
+	}{Text: " x "}
+	if err := normalize.NormalizeWithRegistry(&tagged, nil); !errors.Is(err, normalize.ErrModifierNotFound) {
+		t.Fatalf("got %v, want ErrModifierNotFound", err)
+	}
+	var registry *modifiers.Registry
+	if err := normalize.NormalizeWithRegistry(&tagged, registry); !errors.Is(err, normalize.ErrModifierNotFound) {
+		t.Fatalf("typed nil registry: got %v, want ErrModifierNotFound", err)
+	}
+}
+
+func TestNormalizeRecursiveElementTypesTerminate(t *testing.T) {
+	t.Parallel()
+	type pointerChain *pointerChain
+	type input struct {
+		Chain pointerChain
+		Text  string `normalize:"trim"`
+	}
+	var chain pointerChain
+	chain = &chain
+	v := input{Chain: chain, Text: " x "}
+	if err := normalize.Normalize(&v); err != nil {
+		t.Fatal(err)
+	}
+	if v.Text != "x" {
+		t.Fatalf("got %q", v.Text)
+	}
+}
+
+// TestNormalizeDoesNotWriteUnchangedMaps runs readers next to Normalize on
+// already normalized data; the race detector fails it if a map is written.
+func TestNormalizeDoesNotWriteUnchangedMaps(t *testing.T) {
+	t.Parallel()
+	type item struct {
+		Name string `normalize:"trim"`
+	}
+	type holder struct{ Items map[string]item }
+	items := map[string]item{"a": {Name: "a"}, "b": {Name: "b"}}
+	var wg sync.WaitGroup
+	for range 4 {
+		wg.Go(func() {
+			for range 100 {
+				for _, it := range items {
+					_ = it.Name
+				}
+			}
+		})
+	}
+	for range 100 {
+		if err := normalize.Normalize(&holder{Items: items}); err != nil {
+			t.Error(err)
+			break
+		}
+	}
+	wg.Wait()
+}
+
+type failingRoot struct {
+	Name string `normalize:"trim"`
+}
+
+var errRootFailure = errors.New("root failure")
+
+func (*failingRoot) Normalize() error { return errRootFailure }
+
+func TestCustomNormalizerErrorAtRootHasNoPath(t *testing.T) {
+	t.Parallel()
+	err := normalize.Normalize(&failingRoot{Name: " x "})
+	if !errors.Is(err, errRootFailure) {
+		t.Fatalf("got %v, want the custom error", err)
+	}
+	if strings.Contains(err.Error(), " at ") {
+		t.Fatalf("root error names a path: %v", err)
+	}
+}
+
+func TestNormalizeInterfaceValues(t *testing.T) {
+	t.Parallel()
+	type item struct {
+		Name string `normalize:"trim"`
+	}
+	type broken struct {
+		Name string `normalize:"missing"`
+	}
+	type holder struct {
+		Nil    any
+		Scalar any
+		Item   any
+		Items  []any
+	}
+	v := holder{Scalar: " kept ", Item: &item{Name: " a "}, Items: []any{item{Name: " b "}, 7}}
+	if err := normalize.Normalize(&v); err != nil {
+		t.Fatal(err)
+	}
+	if v.Nil != nil || v.Scalar != " kept " || v.Item.(*item).Name != "a" || v.Items[0].(item).Name != "b" || v.Items[1] != 7 {
+		t.Fatalf("unexpected result: %#v", v)
+	}
+	err := normalize.Normalize(&holder{Items: []any{broken{}}})
+	if !errors.Is(err, normalize.ErrModifierNotFound) || !strings.Contains(err.Error(), "Items[0].Name") {
+		t.Fatalf("error inside an interface lost its path: %v", err)
+	}
+}
+
+func TestNormalizeEmptyContainers(t *testing.T) {
+	t.Parallel()
+	type item struct {
+		Name string `normalize:"missing"`
+	}
+	v := struct {
+		Slice    []item
+		Array    [0]item
+		Map      map[string]item
+		NilSlice []item
+		NilMap   map[string]*item
+		Pointer  *item
+	}{Slice: []item{}, Map: map[string]item{}}
+	if err := normalize.Normalize(&v); err != nil {
+		t.Fatalf("empty containers have nothing to normalize: %v", err)
+	}
+}
+
+func TestModifierErrorPathThroughMapsAndArrays(t *testing.T) {
+	t.Parallel()
+	type leaf struct {
+		Value string `normalize:"reject"`
+	}
+	type branch struct{ Leaves [2]leaf }
+	r := modifiers.NewRegistry()
+	r.Register("reject", func(v reflect.Value, _ map[string]string) modifiers.ModifierResult {
+		if v.String() == "bad" {
+			return modifiers.ModifierResult{Error: &modifiers.ModifierError{Cause: errors.New("bad value")}}
+		}
+		return modifiers.ModifierResult{Value: v}
+	})
+	v := struct{ Branches map[string]branch }{Branches: map[string]branch{"secret": {Leaves: [2]leaf{{Value: "ok"}, {Value: "bad"}}}}}
+	err := normalize.NormalizeWithRegistry(&v, r)
+	modifierErr, ok := errors.AsType[*modifiers.ModifierError](err)
+	if !ok {
+		t.Fatalf("got %v, want a *modifiers.ModifierError", err)
+	}
+	if modifierErr.FieldPath != "Branches.{key}.Leaves[1].Value" || modifierErr.FieldName != "Value" || modifierErr.ModifierName != "reject" {
+		t.Fatalf("unexpected error context: %+v", modifierErr)
 	}
 }

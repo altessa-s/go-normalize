@@ -95,6 +95,32 @@ func TestRegistryRegister(t *testing.T) {
 	}
 }
 
+func TestRegistryZeroValueAndReplacement(t *testing.T) {
+	t.Parallel()
+	var r modifiers.Registry
+	if _, ok := r.Get("x"); ok {
+		t.Fatal("empty registry returned a modifier")
+	}
+	first := modifiers.Modifier(func(v reflect.Value, _ map[string]string) modifiers.ModifierResult {
+		return modifiers.ModifierResult{Value: reflect.ValueOf("first")}
+	})
+	second := modifiers.Modifier(func(v reflect.Value, _ map[string]string) modifiers.ModifierResult {
+		return modifiers.ModifierResult{Value: reflect.ValueOf("second")}
+	})
+	r.Register("x", first)
+	r.Register("y", first)
+	r.Register("x", second)
+	for name, want := range map[string]string{"x": "second", "y": "first"} {
+		m, ok := r.Get(name)
+		if !ok {
+			t.Fatalf("%s is not registered", name)
+		}
+		if got := m(reflect.Value{}, nil).Value.String(); got != want {
+			t.Fatalf("Get(%q) resolved to %q, want %q", name, got, want)
+		}
+	}
+}
+
 func TestModifierEdgeCases(t *testing.T) {
 	t.Parallel()
 	transform := func(s string) (string, bool) { return strings.ToUpper(s), true }
@@ -181,13 +207,7 @@ func TestRegistryAndParserConcurrent(t *testing.T) {
 	}
 	wg.Wait()
 	if got := modifiers.Parse("phone(region=US)").Params["region"]; got != "US" {
-		t.Fatalf("cached parse was mutated: %q", got)
-	}
-}
-
-func BenchmarkParseModifierCache(b *testing.B) {
-	for b.Loop() {
-		_ = modifiers.Parse("phone(region=US)")
+		t.Fatalf("parsed parameters are shared between calls: %q", got)
 	}
 }
 
@@ -231,5 +251,62 @@ func TestRemoveEmptyElementsPreservesUnchangedAndNamedPointerSlices(t *testing.T
 	modifiers.RemoveEmptyElements(reflect.ValueOf(&tags).Elem(), nil)
 	if !reflect.DeepEqual(tags, []*tag{&a, &b}) {
 		t.Fatalf("named string pointers were not preserved: %#v", tags)
+	}
+}
+
+func TestModifiersIgnoreInvalidAndUnsupportedValues(t *testing.T) {
+	t.Parallel()
+	upper := func(s string) (string, bool) { return strings.ToUpper(s), s != strings.ToUpper(s) }
+	if got := modifiers.ApplyStringModifier(reflect.Value{}, upper); got.Value.IsValid() || got.Error != nil {
+		t.Fatalf("invalid value: %+v", got)
+	}
+	if got := modifiers.NilOnEmpty(reflect.Value{}, nil); got.Value.IsValid() || got.Error != nil {
+		t.Fatalf("invalid value: %+v", got)
+	}
+	already := "UPPER"
+	v := reflect.ValueOf(&already)
+	if got := modifiers.ApplyStringModifier(v, upper); got.Value.Pointer() != v.Pointer() {
+		t.Fatal("unchanged non-settable pointer was replaced")
+	}
+}
+
+func TestNilOnEmptyFollowsPointerChains(t *testing.T) {
+	t.Parallel()
+	empty, value := "", "x"
+	emptyPtr, valuePtr := &empty, &value
+	chain := struct{ Empty, Value **string }{Empty: &emptyPtr, Value: &valuePtr}
+	modifiers.NilOnEmpty(reflect.ValueOf(&chain.Empty).Elem(), nil)
+	modifiers.NilOnEmpty(reflect.ValueOf(&chain.Value).Elem(), nil)
+	if *chain.Empty != nil {
+		t.Fatal("empty string behind a pointer chain was not set to nil")
+	}
+	if *chain.Value != valuePtr {
+		t.Fatal("non-empty string behind a pointer chain was changed")
+	}
+	var nilChain **string
+	if got := modifiers.NilOnEmpty(reflect.ValueOf(&nilChain).Elem(), nil); !got.Value.IsValid() {
+		t.Fatal("nil pointer chain lost its value")
+	}
+}
+
+func TestParseParameters(t *testing.T) {
+	t.Parallel()
+	cases := []struct {
+		clause string
+		want   modifiers.ModifierParams
+	}{
+		{clause: " trim ", want: modifiers.ModifierParams{Name: "trim"}},
+		{clause: "", want: modifiers.ModifierParams{}},
+		{clause: "(x=1)", want: modifiers.ModifierParams{Name: "(x=1)"}},
+		{clause: "phone(", want: modifiers.ModifierParams{Name: "phone("}},
+		{clause: "f(a = 1 ;; flag ; k=v=w)", want: modifiers.ModifierParams{Name: "f", Params: map[string]string{"a": "1", "flag": "", "k": "v=w"}}},
+	}
+	for _, tc := range cases {
+		t.Run(tc.clause, func(t *testing.T) {
+			t.Parallel()
+			if got := modifiers.Parse(tc.clause); !reflect.DeepEqual(got, tc.want) {
+				t.Fatalf("Parse(%q) = %#v, want %#v", tc.clause, got, tc.want)
+			}
+		})
 	}
 }

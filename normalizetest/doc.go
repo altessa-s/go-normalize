@@ -3,4 +3,6 @@
 // the LICENSE file.
 
 // Package normalizetest contains helpers for normalization tests.
+//
+//	normalizetest.RequireNormalized(t, normalize.Normalize, &contact)
 package normalizetest

@@ -81,3 +81,54 @@ func TestEqualValueComparesInterfacesAndCycles(t *testing.T) {
 		t.Fatal("different values held by interfaces should compare unequal")
 	}
 }
+
+func TestEqualValueEdgeCases(t *testing.T) {
+	t.Parallel()
+	type pair struct{ A, B any }
+	n := 1
+	selfMap := map[string]any{}
+	selfMap["self"] = selfMap
+	otherSelfMap := map[string]any{}
+	otherSelfMap["self"] = otherSelfMap
+	cases := []struct {
+		name string
+		a, b reflect.Value
+		want bool
+	}{
+		{name: "both invalid", a: reflect.Value{}, b: reflect.Value{}, want: true},
+		{name: "one invalid", a: reflect.Value{}, b: reflect.ValueOf(1), want: false},
+		{name: "different types", a: reflect.ValueOf(1), b: reflect.ValueOf("1"), want: false},
+		{name: "nil and set interface", a: reflect.ValueOf(pair{}), b: reflect.ValueOf(pair{A: 1}), want: false},
+		{name: "nil interfaces", a: reflect.ValueOf(pair{}), b: reflect.ValueOf(pair{}), want: true},
+		{name: "nil and set pointer", a: reflect.ValueOf((*int)(nil)), b: reflect.ValueOf(&n), want: false},
+		{name: "same pointer", a: reflect.ValueOf(&n), b: reflect.ValueOf(&n), want: true},
+		{name: "nil and empty slice", a: reflect.ValueOf([]int(nil)), b: reflect.ValueOf([]int{}), want: false},
+		{name: "nil slices", a: reflect.ValueOf([]int(nil)), b: reflect.ValueOf([]int(nil)), want: true},
+		{name: "slice lengths", a: reflect.ValueOf([]int{1}), b: reflect.ValueOf([]int{1, 2}), want: false},
+		{name: "map lengths", a: reflect.ValueOf(map[int]int{1: 1}), b: reflect.ValueOf(map[int]int{1: 1, 2: 2}), want: false},
+		{name: "missing map key", a: reflect.ValueOf(map[int]int{1: 1}), b: reflect.ValueOf(map[int]int{2: 1}), want: false},
+		{name: "cyclic maps", a: reflect.ValueOf(selfMap), b: reflect.ValueOf(otherSelfMap), want: true},
+		{name: "nil and set func", a: reflect.ValueOf((func())(nil)), b: reflect.ValueOf(func() {}), want: false},
+		{name: "plain values", a: reflect.ValueOf("x"), b: reflect.ValueOf("x"), want: true},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			if got := equalValue(tc.a, tc.b, make(map[valuePair]bool)); got != tc.want {
+				t.Fatalf("equalValue() = %v, want %v", got, tc.want)
+			}
+		})
+	}
+}
+
+func TestEqualValueComparesUnexportedFields(t *testing.T) {
+	t.Parallel()
+	type hidden struct{ value int }
+	a := reflect.ValueOf(hidden{value: 1})
+	if !equalValue(a, reflect.ValueOf(hidden{value: 1}), make(map[valuePair]bool)) {
+		t.Fatal("equal unexported fields compared unequal")
+	}
+	if equalValue(a, reflect.ValueOf(hidden{value: 2}), make(map[valuePair]bool)) {
+		t.Fatal("different unexported fields compared equal")
+	}
+}
