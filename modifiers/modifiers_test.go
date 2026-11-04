@@ -1,0 +1,235 @@
+// Copyright 2026 ALTESSA SOLUTIONS INC.
+// Use of this source code is governed by the MIT license that can be found in
+// the LICENSE file.
+
+package modifiers_test
+
+import (
+	"fmt"
+	"reflect"
+	"strings"
+	"sync"
+	"testing"
+
+	"github.com/altessa-s/go-normalize/modifiers"
+)
+
+func TestBuiltins(t *testing.T) {
+	t.Parallel()
+	type named string
+	blank := ""
+	vals := []*string{nil, &blank}
+	v := struct {
+		A named
+		B *string
+		C string
+		D string
+		E []string
+		F []*string
+	}{A: " HEY ", B: &blank, C: "a\u202eb", D: "x\ny", E: []string{"a", " ", "b"}, F: vals}
+	r := modifiers.DefaultRegistry()
+	cases := []struct {
+		name  string
+		fn    modifiers.Modifier
+		field reflect.Value
+	}{{"trim", must(r.Get("trim")), reflect.ValueOf(&v.A).Elem()}, {"nil", must(r.Get("nil_on_empty")), reflect.ValueOf(&v.B).Elem()}, {"bad", must(r.Get("remove_bad_symbols")), reflect.ValueOf(&v.C).Elem()}, {"controls", must(r.Get("remove_bad_symbols")), reflect.ValueOf(&v.D).Elem()}, {"slice", must(r.Get("remove_empty_elements")), reflect.ValueOf(&v.E).Elem()}, {"ptr-slice", must(r.Get("remove_empty_elements")), reflect.ValueOf(&v.F).Elem()}}
+	for _, c := range cases {
+		if out := c.fn(c.field, nil); out.Error != nil {
+			t.Fatal(out.Error)
+		}
+	}
+	if v.A != "HEY" || v.B != nil || v.C != "ab" || v.D != "xy" || len(v.E) != 2 || len(v.F) != 0 {
+		t.Fatalf("unexpected result: %#v", v)
+	}
+	lower, _ := r.Get("lowercase")
+	s := "UP"
+	lower(reflect.ValueOf(&s).Elem(), nil)
+	if s != "up" {
+		t.Fatal(s)
+	}
+	upper, _ := r.Get("uppercase")
+	upper(reflect.ValueOf(&s).Elem(), nil)
+	if s != "UP" {
+		t.Fatal(s)
+	}
+	if _, ok := modifiers.NewRegistry().Get("absent"); ok {
+		t.Fatal("unexpected modifier")
+	}
+	if strings.TrimSpace(" x ") != "x" {
+		t.Fatal("unreachable")
+	}
+}
+func must(m modifiers.Modifier, ok bool) modifiers.Modifier {
+	if !ok {
+		panic("missing builtin")
+	}
+	return m
+}
+func TestParse(t *testing.T) {
+	t.Parallel()
+	for _, in := range []string{"bad(", "(x=1)"} {
+		_ = modifiers.Parse(in)
+	}
+	if got := modifiers.Parse("phone(region=us; country=ca)"); got.Name != "phone" || !reflect.DeepEqual(got.Params, map[string]string{"region": "us", "country": "ca"}) {
+		t.Fatalf("unexpected parsed parameters: %#v", got)
+	}
+	if got := modifiers.Parse("phone()"); got.Name != "phone" || got.Params == nil || len(got.Params) != 0 {
+		t.Fatalf("empty parameters should produce an empty map: %#v", got)
+	}
+	if got := modifiers.Parse("trim"); got.Name != "trim" || got.Params != nil {
+		t.Fatalf("plain modifier should have nil parameters: %#v", got)
+	}
+}
+func TestRegistryRegister(t *testing.T) {
+	t.Parallel()
+	r := modifiers.NewRegistry()
+	r.Register("x", func(v reflect.Value, _ map[string]string) modifiers.ModifierResult {
+		return modifiers.ModifierResult{Value: v}
+	})
+	if _, ok := r.Get("x"); !ok {
+		t.Fatal("not registered")
+	}
+	r.Register("", nil)
+	if _, ok := r.Get(""); ok {
+		t.Fatal("accepted invalid entry")
+	}
+}
+
+func TestModifierEdgeCases(t *testing.T) {
+	t.Parallel()
+	transform := func(s string) (string, bool) { return strings.ToUpper(s), true }
+	unchanged := reflect.ValueOf(" ")
+	if got := modifiers.ApplyStringModifier(unchanged, transform); got.Value.String() != " " {
+		t.Fatal(got)
+	}
+	ptrValue := "lower"
+	holder := &ptrValue
+	ptr := reflect.ValueOf(&holder).Elem()
+	modifiers.ApplyStringModifier(ptr, transform)
+	if *holder != "LOWER" {
+		t.Fatal(ptrValue)
+	}
+	var nilPtr *string
+	modifiers.ApplyStringModifier(reflect.ValueOf(nilPtr), transform)
+	modifiers.ApplyStringModifier(reflect.ValueOf(3), transform)
+	s := "value"
+	modifiers.NilOnEmpty(reflect.ValueOf(&s).Elem(), nil)
+	var p *string
+	modifiers.NilOnEmpty(reflect.ValueOf(&p).Elem(), nil)
+	modifiers.RemoveEmptyElements(reflect.ValueOf(2), nil)
+	array := []int{1}
+	modifiers.RemoveEmptyElements(reflect.ValueOf(&array).Elem(), nil)
+	nonSettable := []string{"x"}
+	modifiers.RemoveEmptyElements(reflect.ValueOf(nonSettable), nil)
+	for _, input := range []string{"(bad)", "trim(", "trim()", " trim ", "phone(a=1;flag)"} {
+		_ = modifiers.Parse(input)
+	}
+	var registry *modifiers.Registry
+	if _, ok := registry.Get("x"); ok {
+		t.Fatal("nil registry returned a modifier")
+	}
+	registry.Register("x", func(reflect.Value, map[string]string) modifiers.ModifierResult { return modifiers.ModifierResult{} })
+}
+
+func TestRemoveBadSymbolsPreservesLegacyUnicodeSet(t *testing.T) {
+	t.Parallel()
+	bad := []rune{
+		'\u0340', '\u0341', '\u17a3', '\u17d3', '\u2028', '\u2029',
+		'\u202a', '\u202b', '\u202c', '\u202d', '\u202e',
+		'\u206a', '\u206b', '\u206c', '\u206d', '\u206e', '\u206f',
+		'\ufff9', '\ufffa', '\ufffb', '\ufeff', '\ufffc',
+		'\U0001d173', '\U0001d17a', '\U000e0000', '\U000e007f',
+	}
+	remove := must(modifiers.DefaultRegistry().Get("remove_bad_symbols"))
+	for _, r := range bad {
+		t.Run(fmt.Sprintf("U+%04X", r), func(t *testing.T) {
+			input := "a" + string(r) + "b"
+			value := reflect.ValueOf(&input).Elem()
+			if result := remove(value, nil); result.Error != nil {
+				t.Fatal(result.Error)
+			}
+			if input != "ab" {
+				t.Fatalf("U+%04X was not removed: %q", r, input)
+			}
+		})
+	}
+	allBad := string([]rune{'\u0340', '\u0341'})
+	value := reflect.ValueOf(&allBad).Elem()
+	if result := remove(value, nil); result.Error != nil {
+		t.Fatal(result.Error)
+	}
+	if allBad != string([]rune{'\u0340', '\u0341'}) {
+		t.Fatalf("legacy behavior should preserve a nonempty string that sanitizes to empty: %q", allBad)
+	}
+}
+
+func TestRegistryAndParserConcurrent(t *testing.T) {
+	t.Parallel()
+	r := modifiers.NewRegistry()
+	var wg sync.WaitGroup
+	for range 8 {
+		wg.Go(func() {
+			for range 100 {
+				r.Register("trim", func(v reflect.Value, _ map[string]string) modifiers.ModifierResult {
+					return modifiers.ModifierResult{Value: v}
+				})
+				_, _ = r.Get("trim")
+				p := modifiers.Parse("phone(region=US)")
+				p.Params["region"] = "XX"
+			}
+		})
+	}
+	wg.Wait()
+	if got := modifiers.Parse("phone(region=US)").Params["region"]; got != "US" {
+		t.Fatalf("cached parse was mutated: %q", got)
+	}
+}
+
+func BenchmarkParseModifierCache(b *testing.B) {
+	for b.Loop() {
+		_ = modifiers.Parse("phone(region=US)")
+	}
+}
+
+func TestApplyStringModifierPreservesNamedStringTypes(t *testing.T) {
+	t.Parallel()
+	type named string
+	for _, pointer := range []bool{false, true} {
+		value := named(" value ")
+		v := reflect.ValueOf(value)
+		if pointer {
+			v = reflect.ValueOf(&value)
+		}
+		result := modifiers.ApplyStringModifier(v, func(s string) (string, bool) {
+			return strings.TrimSpace(s), true
+		})
+		if result.Value.Type() != v.Type() {
+			t.Fatalf("type changed: got %s want %s", result.Value.Type(), v.Type())
+		}
+		got := result.Value
+		if pointer {
+			got = got.Elem()
+		}
+		if got.String() != "value" {
+			t.Fatalf("got %q", got.String())
+		}
+	}
+}
+
+func TestRemoveEmptyElementsPreservesUnchangedAndNamedPointerSlices(t *testing.T) {
+	t.Parallel()
+	unchanged := []string{"one", "two"}
+	v := reflect.ValueOf(&unchanged).Elem()
+	backing := v.Pointer()
+	modifiers.RemoveEmptyElements(v, nil)
+	if v.Pointer() != backing {
+		t.Fatal("unchanged slice backing array was replaced")
+	}
+	type tag string
+	a, empty, b := tag("a"), tag(" "), tag("b")
+	tags := []*tag{&a, nil, &empty, &b}
+	modifiers.RemoveEmptyElements(reflect.ValueOf(&tags).Elem(), nil)
+	if !reflect.DeepEqual(tags, []*tag{&a, &b}) {
+		t.Fatalf("named string pointers were not preserved: %#v", tags)
+	}
+}
