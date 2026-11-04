@@ -32,19 +32,24 @@ func newCache() *boundedCache {
 func (c *boundedCache) get(k cacheKey) (cacheEntry, bool) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
+
 	v, ok := c.data[k]
+
 	return v, ok
 }
 func (c *boundedCache) put(k cacheKey, v cacheEntry) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
+
 	if _, ok := c.data[k]; !ok {
 		if len(c.keys) >= c.cap {
 			delete(c.data, c.keys[0])
 			c.keys = c.keys[1:]
 		}
+
 		c.keys = append(c.keys, k)
 	}
+
 	c.data[k] = v
 }
 

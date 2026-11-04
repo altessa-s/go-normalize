@@ -13,10 +13,12 @@ import (
 func TestNormalizePhoneDoesNotCacheLargeInputs(t *testing.T) {
 	large := strings.Repeat("x", maxPhoneCacheKeyLength+1)
 	before := len(phoneCache.data)
+
 	result := NormalizePhone(reflect.ValueOf(large), map[string]string{"region": "US"})
 	if result.Error == nil {
 		t.Fatal("invalid number accepted")
 	}
+
 	if got := len(phoneCache.data); got != before {
 		t.Fatalf("large input retained in phone cache: before=%d after=%d", before, got)
 	}
@@ -24,9 +26,11 @@ func TestNormalizePhoneDoesNotCacheLargeInputs(t *testing.T) {
 
 func TestPhoneCacheSeparatesRegionAndNumber(t *testing.T) {
 	t.Parallel()
+
 	c := newCache()
 	c.put(cacheKey{region: "A\x00B", number: "C"}, cacheEntry{value: "first"})
 	c.put(cacheKey{region: "A", number: "B\x00C"}, cacheEntry{value: "second"})
+
 	got, ok := c.get(cacheKey{region: "A\x00B", number: "C"})
 	if !ok || got.value != "first" {
 		t.Fatalf("distinct region and number pairs share a cache entry: %+v", got)
@@ -35,15 +39,20 @@ func TestPhoneCacheSeparatesRegionAndNumber(t *testing.T) {
 
 func TestPhoneCacheEvictsOldestEntry(t *testing.T) {
 	t.Parallel()
+
 	c := newCache()
+
 	c.cap = 2
 	for _, number := range []string{"1", "2", "3"} {
 		c.put(cacheKey{region: "US", number: number}, cacheEntry{value: number})
 	}
+
 	c.put(cacheKey{region: "US", number: "3"}, cacheEntry{value: "updated"})
+
 	if _, ok := c.get(cacheKey{region: "US", number: "1"}); ok {
 		t.Fatal("oldest entry was not evicted")
 	}
+
 	if got, _ := c.get(cacheKey{region: "US", number: "3"}); got.value != "updated" || len(c.keys) != 2 {
 		t.Fatalf("update of an existing key changed the eviction order: %+v %v", got, c.keys)
 	}

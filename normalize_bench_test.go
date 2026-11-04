@@ -56,6 +56,7 @@ func benchRecords(n int) []benchRecord {
 			Leaf:  &benchLeaf{Value: " leaf "},
 		}
 	}
+
 	return records
 }
 
@@ -64,7 +65,9 @@ func BenchmarkNormalizeFlat(b *testing.B) {
 		A string `normalize:"trim,lowercase"`
 		B string `normalize:"uppercase"`
 	}
+
 	b.ReportAllocs()
+
 	for b.Loop() {
 		v := row{A: " x ", B: "y"}
 		if err := normalize.Normalize(&v); err != nil {
@@ -75,6 +78,7 @@ func BenchmarkNormalizeFlat(b *testing.B) {
 
 func BenchmarkNormalizeRecord(b *testing.B) {
 	b.ReportAllocs()
+
 	for b.Loop() {
 		v := benchRecords(1)[0]
 		if err := normalize.Normalize(&v); err != nil {
@@ -85,6 +89,7 @@ func BenchmarkNormalizeRecord(b *testing.B) {
 
 func BenchmarkNormalizeUntagged(b *testing.B) {
 	b.ReportAllocs()
+
 	v := benchUntagged{A: " a ", P: 1}
 	for b.Loop() {
 		if err := normalize.Normalize(&v); err != nil {
@@ -98,8 +103,11 @@ func BenchmarkNormalizeNested(b *testing.B) {
 		Leaf   *benchLeaf
 		Values []benchLeaf
 	}
+
 	type record struct{ Items []item }
+
 	b.ReportAllocs()
+
 	for b.Loop() {
 		v := record{Items: []item{{Leaf: &benchLeaf{Value: " x "}, Values: []benchLeaf{{Value: " y "}}}}}
 		if err := normalize.Normalize(&v); err != nil {
@@ -113,9 +121,12 @@ func BenchmarkNormalizeSlice(b *testing.B) {
 		b.Run(strconv.Itoa(n), func(b *testing.B) {
 			template := benchRecords(n)
 			v := struct{ Items []benchRecord }{Items: make([]benchRecord, n)}
+
 			b.ReportAllocs()
+
 			for b.Loop() {
 				copy(v.Items, template)
+
 				if err := normalize.Normalize(&v); err != nil {
 					b.Fatal(err)
 				}
@@ -131,10 +142,14 @@ func BenchmarkNormalizeMap(b *testing.B) {
 			for i := range n {
 				template[strconv.Itoa(i)] = benchLeaf{Value: " value "}
 			}
+
 			v := struct{ Items map[string]benchLeaf }{Items: make(map[string]benchLeaf, n)}
+
 			b.ReportAllocs()
+
 			for b.Loop() {
 				maps.Copy(v.Items, template)
+
 				if err := normalize.Normalize(&v); err != nil {
 					b.Fatal(err)
 				}
@@ -148,7 +163,9 @@ func BenchmarkNormalizeScalarMap(b *testing.B) {
 	for i := range 100 {
 		v.Counts[strconv.Itoa(i)] = i
 	}
+
 	b.ReportAllocs()
+
 	for b.Loop() {
 		if err := normalize.Normalize(&v); err != nil {
 			b.Fatal(err)
@@ -158,6 +175,7 @@ func BenchmarkNormalizeScalarMap(b *testing.B) {
 
 func BenchmarkNormalizeCustomNormalizer(b *testing.B) {
 	b.ReportAllocs()
+
 	for b.Loop() {
 		v := benchCustom{Name: " name ", Extra: " extra "}
 		if err := normalize.Normalize(&v); err != nil {
@@ -171,10 +189,13 @@ func BenchmarkNormalizeWithRegistryParams(b *testing.B) {
 	r.Register("pad", func(v reflect.Value, params map[string]string) modifiers.ModifierResult {
 		return modifiers.ApplyStringModifier(v, func(s string) (string, bool) { return s + params["with"], params["with"] != "" })
 	})
+
 	type row struct {
 		Value string `normalize:"pad(with=!)"`
 	}
+
 	b.ReportAllocs()
+
 	for b.Loop() {
 		v := row{Value: "x"}
 		if err := normalize.NormalizeWithRegistry(&v, r); err != nil {

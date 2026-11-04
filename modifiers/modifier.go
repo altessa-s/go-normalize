@@ -29,17 +29,21 @@ type ModifierError struct {
 	Cause                                             error
 }
 
+// Error describes the failure with the modifier name and field path.
 func (e *ModifierError) Error() string {
 	path := e.FieldPath
 	if path == "" {
 		path = e.FieldName
 	}
+
 	if e.Cause == nil {
 		return "normalize: modifier '" + e.ModifierName + "' failed at '" + path + "'"
 	}
+
 	return "normalize: modifier '" + e.ModifierName + "' failed at '" + path + "': " + e.Cause.Error()
 }
 
+// Unwrap returns the cause.
 func (e *ModifierError) Unwrap() error { return e.Cause }
 
 // ModifierParams is a parsed modifier name and parameter map.

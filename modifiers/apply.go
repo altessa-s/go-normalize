@@ -15,22 +15,27 @@ func ApplyStringModifier(v reflect.Value, fn func(string) (string, bool)) Modifi
 	if !v.IsValid() {
 		return ModifierResult{}
 	}
+
 	if v.Kind() == reflect.Pointer && !v.CanSet() {
 		return replaceChain(v, isString, func(src, dst reflect.Value) bool {
 			n, changed := fn(src.String())
 			if changed {
 				dst.SetString(n)
 			}
+
 			return changed
 		})
 	}
+
 	leaf := v
 	for leaf.Kind() == reflect.Pointer {
 		if leaf.IsNil() {
 			return ModifierResult{Value: v}
 		}
+
 		leaf = leaf.Elem()
 	}
+
 	if leaf.Kind() == reflect.String {
 		n, c := fn(leaf.String())
 		if c {
@@ -39,11 +44,14 @@ func ApplyStringModifier(v reflect.Value, fn func(string) (string, bool)) Modifi
 			} else {
 				x := reflect.New(leaf.Type()).Elem()
 				x.SetString(n)
+
 				return ModifierResult{Value: x}
 			}
 		}
+
 		return ModifierResult{Value: v}
 	}
+
 	return ModifierResult{Value: v}
 }
 
@@ -58,13 +66,16 @@ func ApplyStringModifier(v reflect.Value, fn func(string) (string, bool)) Modifi
 func ApplyModifier[T any](v reflect.Value, fn func(T) (T, bool)) ModifierResult {
 	target := reflect.TypeFor[T]()
 	accept := func(t reflect.Type) bool { return matches(t, target) }
+
 	return applyToLeaf(v, accept, func(src, dst reflect.Value) bool {
 		// accept admitted src's type, so the conversion always yields a T.
 		in, _ := reflect.TypeAssert[T](src.Convert(target))
+
 		out, changed := fn(in)
 		if changed {
 			dst.Set(reflect.ValueOf(&out).Elem().Convert(dst.Type()))
 		}
+
 		return changed
 	})
 }
@@ -77,27 +88,34 @@ func applyToLeaf(v reflect.Value, accept func(reflect.Type) bool, update func(sr
 	if !v.IsValid() {
 		return ModifierResult{}
 	}
+
 	if v.Kind() == reflect.Pointer && !v.CanSet() {
 		return replaceChain(v, accept, update)
 	}
+
 	leaf := v
 	for leaf.Kind() == reflect.Pointer {
 		if leaf.IsNil() {
 			return ModifierResult{Value: v}
 		}
+
 		leaf = leaf.Elem()
 	}
+
 	if !accept(leaf.Type()) {
 		return ModifierResult{Value: v}
 	}
+
 	if leaf.CanSet() {
 		update(leaf, leaf)
 		return ModifierResult{Value: v}
 	}
+
 	x := reflect.New(leaf.Type()).Elem()
 	if update(leaf, x) {
 		return ModifierResult{Value: x}
 	}
+
 	return ModifierResult{Value: v}
 }
 
@@ -109,6 +127,7 @@ func replaceChain(v reflect.Value, accept func(reflect.Type) bool, update func(s
 	if !ok || !accept(leaf.Type()) || !update(leaf, leaf) {
 		return ModifierResult{Value: v}
 	}
+
 	return ModifierResult{Value: root}
 }
 
@@ -118,22 +137,28 @@ func replaceChain(v reflect.Value, accept func(reflect.Type) bool, update func(s
 // below it get new zero values and filled reports that.
 func copyChain(v reflect.Value, fill bool) (root, leaf reflect.Value, filled, ok bool) {
 	root = reflect.New(v.Type()).Elem()
+
 	dst, src := root, v
 	for src.Kind() == reflect.Pointer {
 		if src.IsNil() {
 			if !fill {
 				return v, v, false, false
 			}
+
 			for dst.Kind() == reflect.Pointer {
 				dst.Set(reflect.New(dst.Type().Elem()))
 				dst = dst.Elem()
 			}
+
 			return root, dst, true, true
 		}
+
 		dst.Set(reflect.New(src.Type().Elem()))
 		dst, src = dst.Elem(), src.Elem()
 	}
+
 	dst.Set(src)
+
 	return root, dst, false, true
 }
 
@@ -144,7 +169,9 @@ func matches(t, target reflect.Type) bool {
 	if t == target {
 		return true
 	}
+
 	predeclared := target.PkgPath() == "" && target.Name() != ""
+
 	return predeclared && isBasic(target.Kind()) && t.Kind() == target.Kind()
 }
 
@@ -155,5 +182,6 @@ func isBasic(k reflect.Kind) bool {
 		reflect.Float32, reflect.Float64, reflect.Complex64, reflect.Complex128, reflect.String:
 		return true
 	}
+
 	return false
 }

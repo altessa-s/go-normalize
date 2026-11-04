@@ -16,6 +16,7 @@ func FuzzNormalizePhone(f *testing.F) {
 	f.Add("", "RU")
 	f.Fuzz(func(t *testing.T, s, region string) {
 		v := reflect.ValueOf(s)
+
 		result := phone.NormalizePhone(v, map[string]string{"region": region})
 		if result.Value.IsValid() && result.Value.Kind() != reflect.String {
 			t.Fatalf("unexpected kind %s", result.Value.Kind())

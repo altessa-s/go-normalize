@@ -27,8 +27,10 @@ func (r *Registry) Register(name string, modifier Modifier) {
 	if r == nil || name == "" || modifier == nil {
 		return
 	}
+
 	r.mu.Lock()
 	defer r.mu.Unlock()
+
 	var items map[string]Modifier
 	if current := r.items.Load(); current != nil {
 		items = make(map[string]Modifier, len(*current)+1)
@@ -36,6 +38,7 @@ func (r *Registry) Register(name string, modifier Modifier) {
 	} else {
 		items = make(map[string]Modifier, 1)
 	}
+
 	items[name] = modifier
 	r.items.Store(&items)
 }
@@ -45,11 +48,14 @@ func (r *Registry) Get(name string) (Modifier, bool) {
 	if r == nil {
 		return nil, false
 	}
+
 	items := r.items.Load()
 	if items == nil {
 		return nil, false
 	}
+
 	m, ok := (*items)[name]
+
 	return m, ok
 }
 
@@ -83,5 +89,6 @@ func buildDefaultRegistry() *Registry {
 	r.Register("truncate_time", TruncateTime)
 	r.Register("clamp", Clamp)
 	r.Register("url", URL)
+
 	return r
 }

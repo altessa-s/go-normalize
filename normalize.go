@@ -43,9 +43,12 @@ func NormalizeWithRegistry(value any, registry ModifierSource) error {
 	if v.Kind() != reflect.Pointer || v.IsNil() || v.Elem().Kind() != reflect.Struct {
 		return ErrInvalidInput
 	}
+
 	if registry == nil {
 		registry = (*modifiers.Registry)(nil)
 	}
+
 	w := walker{source: registry}
+
 	return resolvePath(w.walk(v.Elem()))
 }

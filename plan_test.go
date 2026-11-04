@@ -22,6 +22,7 @@ func (*planCustom) Normalize() error { return nil }
 
 func TestNeedsWalk(t *testing.T) {
 	t.Parallel()
+
 	cases := []struct {
 		typ  reflect.Type
 		want bool
@@ -42,6 +43,7 @@ func TestNeedsWalk(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.typ.String(), func(t *testing.T) {
 			t.Parallel()
+
 			if got := needsWalk(tc.typ); got != tc.want {
 				t.Fatalf("needsWalk(%s) = %v, want %v", tc.typ, got, tc.want)
 			}
@@ -51,6 +53,7 @@ func TestNeedsWalk(t *testing.T) {
 
 func TestBuildPlanKeepsOnlyFieldsWithWork(t *testing.T) {
 	t.Parallel()
+
 	type input struct {
 		Plain    string
 		Trimmed  string `normalize:" trim , lowercase ,"`
@@ -59,29 +62,36 @@ func TestBuildPlanKeepsOnlyFieldsWithWork(t *testing.T) {
 		Nested   *planCustom
 		Counts   map[string]int
 		Empty    string `normalize:","`
-		internal string `normalize:"trim"`
+		internal string `normalize:"trim"` //nolint:unused // proves unexported fields stay out of the plan
 	}
+
 	plan := buildPlan(reflect.TypeFor[input]())
 	if plan.custom {
 		t.Fatal("input does not implement CustomNormalizer")
 	}
+
 	var names []string
 	for _, f := range plan.fields {
 		names = append(names, f.name)
 	}
+
 	if !reflect.DeepEqual(names, []string{"Trimmed", "Nested"}) {
 		t.Fatalf("planned fields = %v, want [Trimmed Nested]", names)
 	}
+
 	trimmed := plan.fields[0]
 	if len(trimmed.clauses) != 2 || trimmed.clauses[0].Name != "trim" || trimmed.clauses[1].Name != "lowercase" || trimmed.traverse {
 		t.Fatalf("unexpected plan for Trimmed: %+v", trimmed)
 	}
+
 	if !plan.fields[1].traverse || len(plan.fields[1].clauses) != 0 {
 		t.Fatalf("unexpected plan for Nested: %+v", plan.fields[1])
 	}
+
 	if !buildPlan(reflect.TypeFor[planCustom]()).custom {
 		t.Fatal("*planCustom implements CustomNormalizer")
 	}
+
 	if planFor(reflect.TypeFor[input]()) != planFor(reflect.TypeFor[input]()) {
 		t.Fatal("plans are not cached per type")
 	}
@@ -89,6 +99,7 @@ func TestBuildPlanKeepsOnlyFieldsWithWork(t *testing.T) {
 
 func TestFormatPath(t *testing.T) {
 	t.Parallel()
+
 	cases := []struct {
 		name     string
 		segments []segment // innermost first
@@ -102,6 +113,7 @@ func TestFormatPath(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
+
 			if got := formatPath(tc.segments); got != tc.want {
 				t.Fatalf("formatPath() = %q, want %q", got, tc.want)
 			}
@@ -111,15 +123,19 @@ func TestFormatPath(t *testing.T) {
 
 func TestPathErrorResolvesWithItsPath(t *testing.T) {
 	t.Parallel()
+
 	err := within(failAt(func(path string) error { return errors.New("failed at " + path) }), segment{name: "Name"})
 	err = within(err, segment{index: 2})
+
 	err = within(err, segment{name: "Items"})
 	if got := err.Error(); got != "failed at Items[2].Name" {
 		t.Fatalf("Error() = %q", got)
 	}
+
 	if got := resolvePath(err).Error(); got != "failed at Items[2].Name" {
 		t.Fatalf("resolvePath() = %q", got)
 	}
+
 	plain := errors.New("plain")
 	if within(plain, segment{name: "X"}) != plain || resolvePath(plain) != plain {
 		t.Fatal("errors without a path must pass through unchanged")

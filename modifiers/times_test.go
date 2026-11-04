@@ -15,6 +15,7 @@ import (
 
 func TestUTC(t *testing.T) {
 	t.Parallel()
+
 	local := time.Date(2026, 3, 4, 5, 6, 7, 8, time.FixedZone("UTC+3", 3*3600))
 	v := struct {
 		At      time.Time
@@ -22,15 +23,18 @@ func TestUTC(t *testing.T) {
 		Nil     *time.Time
 		Zero    time.Time
 	}{At: local, Pointer: new(local)}
+
 	utc := must(modifiers.DefaultRegistry().Get("utc"))
 	for i := range reflect.TypeOf(v).NumField() {
 		if out := utc(reflect.ValueOf(&v).Elem().Field(i), nil); out.Error != nil {
 			t.Fatal(out.Error)
 		}
 	}
+
 	if v.At.Location() != time.UTC || !v.At.Equal(local) || v.Pointer.Location() != time.UTC || !v.Pointer.Equal(local) {
 		t.Fatalf("not converted: %v, %v", v.At, *v.Pointer)
 	}
+
 	if v.Nil != nil || !v.Zero.IsZero() {
 		t.Fatalf("nil or zero value changed: %v, %v", v.Nil, v.Zero)
 	}
@@ -38,6 +42,7 @@ func TestUTC(t *testing.T) {
 
 func TestTruncateTime(t *testing.T) {
 	t.Parallel()
+
 	at := time.Date(2026, 3, 4, 5, 6, 7, 891234567, time.UTC)
 	cases := []struct {
 		unit string
@@ -51,20 +56,25 @@ func TestTruncateTime(t *testing.T) {
 		{unit: "ns", want: at},
 	}
 	truncate := must(modifiers.DefaultRegistry().Get("truncate_time"))
+
 	for _, tc := range cases {
 		t.Run(tc.unit, func(t *testing.T) {
 			t.Parallel()
+
 			got := at
 			if out := truncate(reflect.ValueOf(&got).Elem(), map[string]string{"unit": tc.unit}); out.Error != nil {
 				t.Fatal(out.Error)
 			}
+
 			if !got.Equal(tc.want) {
 				t.Fatalf("truncate_time(unit=%s) = %v, want %v", tc.unit, got, tc.want)
 			}
 		})
 	}
+
 	for _, unit := range []string{"", "0s", "-1s", "fortnight"} {
 		got := at
+
 		out := truncate(reflect.ValueOf(&got).Elem(), map[string]string{"unit": unit})
 		if !errors.Is(out.Error, modifiers.ErrInvalidParameter) || !got.Equal(at) {
 			t.Fatalf("unit %q: got %v, value %v", unit, out.Error, got)

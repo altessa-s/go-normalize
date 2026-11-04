@@ -15,17 +15,21 @@ import (
 // applyNamed runs the default-registry modifier name on a settable copy of input.
 func applyNamed(t *testing.T, name string, params map[string]string, input string) (string, *modifiers.ModifierError) {
 	t.Helper()
+
 	m, ok := modifiers.DefaultRegistry().Get(name)
 	if !ok {
 		t.Fatalf("%s is not registered", name)
 	}
+
 	s := input
 	out := m(reflect.ValueOf(&s).Elem(), params)
+
 	return s, out.Error
 }
 
 func TestStringModifiers(t *testing.T) {
 	t.Parallel()
+
 	cases := []struct {
 		modifier string
 		params   map[string]string
@@ -58,10 +62,12 @@ func TestStringModifiers(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.modifier+"/"+tc.input, func(t *testing.T) {
 			t.Parallel()
+
 			got, err := applyNamed(t, tc.modifier, tc.params, tc.input)
 			if err != nil {
 				t.Fatal(err)
 			}
+
 			if got != tc.want {
 				t.Fatalf("%s(%q) = %q, want %q", tc.modifier, tc.input, got, tc.want)
 			}
@@ -71,11 +77,13 @@ func TestStringModifiers(t *testing.T) {
 
 func TestTruncateRejectsInvalidMax(t *testing.T) {
 	t.Parallel()
+
 	for _, params := range []map[string]string{nil, {"max": ""}, {"max": "ten"}, {"max": "-1"}} {
 		got, err := applyNamed(t, "truncate", params, "abc")
 		if err == nil || !errors.Is(err, modifiers.ErrInvalidParameter) {
 			t.Fatalf("params %v: got %v, want ErrInvalidParameter", params, err)
 		}
+
 		if got != "abc" {
 			t.Fatalf("params %v: value changed to %q", params, got)
 		}

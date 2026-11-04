@@ -35,6 +35,7 @@ func Register(registry Registrar) {
 	if registry == nil {
 		return
 	}
+
 	registry.Register("phone", NormalizePhone)
 }
 
@@ -43,8 +44,11 @@ func NormalizePhone(v reflect.Value, params map[string]string) modifiers.Modifie
 	if !v.IsValid() {
 		return modifiers.ModifierResult{Value: v}
 	}
+
 	var s string
+
 	ptr := false
+
 	switch v.Kind() {
 	case reflect.String:
 		s = v.String()
@@ -52,36 +56,45 @@ func NormalizePhone(v reflect.Value, params map[string]string) modifiers.Modifie
 		if v.IsNil() || v.Type().Elem().Kind() != reflect.String {
 			return modifiers.ModifierResult{Value: v}
 		}
+
 		s = v.Elem().String()
 		ptr = true
 	default:
 		return modifiers.ModifierResult{Value: v}
 	}
+
 	if s == "" {
 		return modifiers.ModifierResult{Value: v}
 	}
+
 	region := cmp.Or(strings.ToUpper(params["region"]), defaultRegion)
 	key := cacheKey{region: region, number: s}
+
 	cacheable := len(region)+len(s) <= maxPhoneCacheKeyLength
 	if cacheable {
 		if got, ok := phoneCache.get(key); ok {
 			if got.err {
 				return fail(v)
 			}
+
 			return set(v, got.value, ptr)
 		}
 	}
+
 	n, err := phonenumbers.Parse(separators.Replace(s), region)
 	if err != nil || !phonenumbers.IsValidNumber(n) {
 		if cacheable {
 			phoneCache.put(key, cacheEntry{err: true})
 		}
+
 		return fail(v)
 	}
+
 	out := phonenumbers.Format(n, phonenumbers.E164)
 	if cacheable {
 		phoneCache.put(key, cacheEntry{value: out})
 	}
+
 	return set(v, out, ptr)
 }
 
@@ -92,20 +105,26 @@ func set(v reflect.Value, s string, ptr bool) modifiers.ModifierResult {
 	if ptr {
 		x := reflect.New(v.Type().Elem())
 		x.Elem().SetString(s)
+
 		if v.CanSet() {
 			v.Set(x)
 			return modifiers.ModifierResult{Value: v}
 		}
+
 		return modifiers.ModifierResult{Value: x}
 	}
+
 	if s == v.String() {
 		return modifiers.ModifierResult{Value: v}
 	}
+
 	if v.CanSet() {
 		v.SetString(s)
 		return modifiers.ModifierResult{Value: v}
 	}
+
 	x := reflect.New(v.Type()).Elem()
 	x.SetString(s)
+
 	return modifiers.ModifierResult{Value: x}
 }

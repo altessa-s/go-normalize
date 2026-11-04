@@ -47,8 +47,10 @@ func planFor(t reflect.Type) *structPlan {
 			return plan
 		}
 	}
+
 	plan := buildPlan(t)
 	plans.Store(t, plan)
+
 	return plan
 }
 
@@ -59,16 +61,19 @@ func buildPlan(t reflect.Type) *structPlan {
 		if !f.IsExported() || tag == "-" || tag == TagValueCustom {
 			continue
 		}
+
 		field := fieldPlan{index: f.Index[0], name: f.Name, traverse: needsWalk(f.Type)}
 		for clause := range strings.SplitSeq(tag, ",") {
 			if p := modifiers.Parse(clause); p.Name != "" {
 				field.clauses = append(field.clauses, p)
 			}
 		}
+
 		if len(field.clauses) > 0 || field.traverse {
 			plan.fields = append(plan.fields, field)
 		}
 	}
+
 	return plan
 }
 
@@ -85,5 +90,6 @@ func needsWalk(t reflect.Type) bool {
 			return false
 		}
 	}
+
 	return true
 }

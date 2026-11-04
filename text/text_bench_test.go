@@ -28,7 +28,9 @@ func BenchmarkModifiers(b *testing.B) {
 	for _, tc := range cases {
 		b.Run(tc.name, func(b *testing.B) {
 			b.ReportAllocs()
+
 			var s string
+
 			v := reflect.ValueOf(&s).Elem()
 			for b.Loop() {
 				s = tc.input

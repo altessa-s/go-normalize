@@ -41,6 +41,7 @@ func within(err error, s segment) error {
 	if pe, ok := errors.AsType[*pathError](err); ok {
 		pe.segments = append(pe.segments, s)
 	}
+
 	return err
 }
 
@@ -49,23 +50,29 @@ func resolvePath(err error) error {
 	if pe, ok := errors.AsType[*pathError](err); ok {
 		return pe.resolve()
 	}
+
 	return err
 }
 
 // formatPath renders innermost-first segments as Field.Items[1].{key}.Name.
 func formatPath(segments []segment) string {
 	var b []byte
+
 	for _, s := range slices.Backward(segments) {
 		if s.name == "" {
 			b = append(b, '[')
 			b = strconv.AppendInt(b, int64(s.index), 10)
 			b = append(b, ']')
+
 			continue
 		}
+
 		if len(b) > 0 {
 			b = append(b, '.')
 		}
+
 		b = append(b, s.name...)
 	}
+
 	return string(b)
 }

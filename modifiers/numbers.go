@@ -19,19 +19,24 @@ import (
 // with ErrInvalidParameter. NaN is left unchanged.
 func Clamp(v reflect.Value, params map[string]string) ModifierResult {
 	lo, hasLo := params["min"]
+
 	hi, hasHi := params["max"]
 	if !hasLo && !hasHi {
 		return invalidParameter(v, "clamp needs min, max or both")
 	}
+
 	var boundsErr error
+
 	out := applyToLeaf(v, isNumber, func(src, dst reflect.Value) bool {
 		changed, err := clampValue(src, dst, limits{lo: lo, hi: hi, hasLo: hasLo, hasHi: hasHi})
 		boundsErr = err
+
 		return changed
 	})
 	if boundsErr != nil {
 		return invalidParameter(v, "%v", boundsErr)
 	}
+
 	return out
 }
 
@@ -48,6 +53,7 @@ func isNumber(t reflect.Type) bool {
 		reflect.Float32, reflect.Float64:
 		return true
 	}
+
 	return false
 }
 
@@ -59,6 +65,7 @@ func clampValue(src, dst reflect.Value, l limits) (bool, error) {
 		if err != nil {
 			return false, err
 		}
+
 		x := src.Int()
 		if c := min(max(x, lo), hi); c != x {
 			dst.SetInt(c)
@@ -69,6 +76,7 @@ func clampValue(src, dst reflect.Value, l limits) (bool, error) {
 		if err != nil {
 			return false, err
 		}
+
 		x := src.Float()
 		if c := min(max(x, lo), hi); c != x && !math.IsNaN(x) {
 			dst.SetFloat(c)
@@ -79,12 +87,14 @@ func clampValue(src, dst reflect.Value, l limits) (bool, error) {
 		if err != nil {
 			return false, err
 		}
+
 		x := src.Uint()
 		if c := min(max(x, lo), hi); c != x {
 			dst.SetUint(c)
 			return true, nil
 		}
 	}
+
 	return false, nil
 }
 
@@ -93,25 +103,30 @@ func parseFloatBound(s string, bits int) (float64, error) {
 	if err == nil && math.IsNaN(f) {
 		return 0, fmt.Errorf("%q is not a number", s)
 	}
+
 	return f, err
 }
 
 // parseBounds parses the bounds present in l; an absent bound is the type's extreme.
 func parseBounds[N cmp.Ordered](l limits, lowest, highest N, parse func(string) (N, error)) (N, N, error) {
 	lo, hi := lowest, highest
+
 	var err error
 	if l.hasLo {
 		if lo, err = parse(l.lo); err != nil {
 			return lo, hi, fmt.Errorf("min: %w", err)
 		}
 	}
+
 	if l.hasHi {
 		if hi, err = parse(l.hi); err != nil {
 			return lo, hi, fmt.Errorf("max: %w", err)
 		}
 	}
+
 	if lo > hi {
 		return lo, hi, fmt.Errorf("min %v exceeds max %v", lo, hi)
 	}
+
 	return lo, hi, nil
 }

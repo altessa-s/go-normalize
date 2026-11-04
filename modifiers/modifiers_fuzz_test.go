@@ -16,9 +16,11 @@ import (
 
 func applyFuzz(t *testing.T, m modifiers.Modifier, params map[string]string, s string) string {
 	t.Helper()
+
 	if out := m(reflect.ValueOf(&s).Elem(), params); out.Error != nil {
 		t.Fatal(out.Error)
 	}
+
 	return s
 }
 
@@ -29,15 +31,18 @@ func FuzzStringModifiers(f *testing.F) {
 	f.Add("\u0430\U0001f600b", 2)
 	f.Add(" HTTPS://User@Example.COM:443/a?b=C#D ", 0)
 	f.Add("http://[::1]:80", 0)
+
 	r := modifiers.DefaultRegistry()
 	get := func(name string) modifiers.Modifier {
 		m, ok := r.Get(name)
 		if !ok {
 			f.Fatalf("%s is not registered", name)
 		}
+
 		return m
 	}
 	collapse, truncate, digits, email, urlModifier := get("collapse_spaces"), get("truncate"), get("digits_only"), get("email"), get("url")
+
 	f.Fuzz(func(t *testing.T, s string, limit int) {
 		valid := utf8.ValidString(s)
 
@@ -45,11 +50,13 @@ func FuzzStringModifiers(f *testing.F) {
 		if strings.Contains(collapsed, "  ") || (valid && !utf8.ValidString(collapsed)) {
 			t.Fatalf("collapse_spaces(%q) = %q", s, collapsed)
 		}
+
 		if again := applyFuzz(t, collapse, nil, collapsed); again != collapsed {
 			t.Fatalf("collapse_spaces is not idempotent: %q -> %q", collapsed, again)
 		}
 
 		limit = min(max(limit, 0), 64)
+
 		truncated := applyFuzz(t, truncate, map[string]string{"max": strconv.Itoa(limit)}, s)
 		if !strings.HasPrefix(s, truncated) || utf8.RuneCountInString(truncated) > limit || (valid && !utf8.ValidString(truncated)) {
 			t.Fatalf("truncate(%q, %d) = %q", s, limit, truncated)

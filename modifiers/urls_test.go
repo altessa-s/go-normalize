@@ -8,6 +8,7 @@ import "testing"
 
 func TestURL(t *testing.T) {
 	t.Parallel()
+
 	cases := []struct {
 		input string
 		want  string
@@ -36,10 +37,12 @@ func TestURL(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.input, func(t *testing.T) {
 			t.Parallel()
+
 			got, err := applyNamed(t, "url", nil, tc.input)
 			if err != nil {
 				t.Fatal(err)
 			}
+
 			if got != tc.want {
 				t.Fatalf("url(%q) = %q, want %q", tc.input, got, tc.want)
 			}

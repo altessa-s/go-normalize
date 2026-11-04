@@ -30,6 +30,7 @@ func Register(registry Registrar) {
 	if registry == nil {
 		return
 	}
+
 	registry.Register("idna", ToASCII)
 }
 
@@ -41,17 +42,20 @@ func Register(registry Registrar) {
 // left unchanged; an invalid domain fails with ErrInvalidDomain.
 func ToASCII(v reflect.Value, _ map[string]string) modifiers.ModifierResult {
 	failed := false
+
 	out := modifiers.ApplyStringModifier(v, func(s string) (string, bool) {
 		n, err := convert(s)
 		if err != nil {
 			failed = true
 			return s, false
 		}
+
 		return n, n != s
 	})
 	if failed {
 		return modifiers.ModifierResult{Value: v, Error: &modifiers.ModifierError{ModifierName: "idna", Cause: ErrInvalidDomain}}
 	}
+
 	return out
 }
 
@@ -59,24 +63,31 @@ func convert(s string) (string, error) {
 	if s == "" {
 		return s, nil
 	}
+
 	if u, err := url.Parse(s); err == nil && u.Scheme != "" && u.Host != "" && u.Opaque == "" {
 		host := u.Hostname()
 		if strings.Contains(host, ":") {
 			return s, nil
 		}
+
 		ascii, err := netidna.Lookup.ToASCII(host)
 		if err != nil {
 			return s, err
 		}
+
 		if port := u.Port(); port != "" {
 			ascii += ":" + port
 		}
+
 		u.Host = ascii
+
 		return u.String(), nil
 	}
+
 	if local, domain, ok := strings.CutLast(s, "@"); ok {
 		ascii, err := netidna.Lookup.ToASCII(domain)
 		return local + "@" + ascii, err
 	}
+
 	return netidna.Lookup.ToASCII(s)
 }

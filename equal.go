@@ -23,17 +23,21 @@ func equalValue(a, b reflect.Value, seen map[valuePair]bool) bool {
 	if !a.IsValid() || !b.IsValid() {
 		return a.IsValid() == b.IsValid()
 	}
+
 	if a.Type() != b.Type() {
 		return false
 	}
+
 	switch a.Kind() { //nolint:exhaustive // remaining kinds compare via Interface where possible
 	case reflect.Interface:
 		if !sameNil(a, b) {
 			return false
 		}
+
 		if a.IsNil() {
 			return true
 		}
+
 		return equalValue(a.Elem(), b.Elem(), seen)
 	case reflect.Pointer:
 		return equalPointers(a, b, seen)
@@ -49,16 +53,20 @@ func equalValue(a, b reflect.Value, seen map[valuePair]bool) bool {
 		if !sameNil(a, b) {
 			return false
 		}
+
 		if a.IsNil() {
 			return true
 		}
+
 		return equalElements(a, b, seen)
 	case reflect.Map:
 		return equalMaps(a, b, seen)
 	}
+
 	if a.CanInterface() && b.CanInterface() {
 		return reflect.DeepEqual(a.Interface(), b.Interface())
 	}
+
 	return a.Equal(b)
 }
 
@@ -72,8 +80,10 @@ func equalFuncs(a, b reflect.Value) bool {
 	if a.IsNil() || b.IsNil() {
 		return a.IsNil() == b.IsNil()
 	}
+
 	pa, okA := closurePointer(a)
 	pb, okB := closurePointer(b)
+
 	return okA && okB && pa == pb
 }
 
@@ -86,10 +96,12 @@ func closurePointer(f reflect.Value) (unsafe.Pointer, bool) {
 		if !f.CanInterface() {
 			return nil, false
 		}
+
 		c := reflect.New(f.Type()).Elem()
 		c.Set(f)
 		f = c
 	}
+
 	return *(*unsafe.Pointer)(f.Addr().UnsafePointer()), true //nolint:gosec // #nosec G103 -- reads the closure pointer a func value holds
 }
 
@@ -99,14 +111,18 @@ func equalPointers(a, b reflect.Value, seen map[valuePair]bool) bool {
 	if !sameNil(a, b) {
 		return false
 	}
+
 	if a.IsNil() || a.Pointer() == b.Pointer() {
 		return true
 	}
+
 	p := valuePair{a: a.Pointer(), b: b.Pointer(), typ: a.Type()}
 	if seen[p] {
 		return true
 	}
+
 	seen[p] = true
+
 	return equalValue(a.Elem(), b.Elem(), seen)
 }
 
@@ -115,21 +131,26 @@ func equalElements(a, b reflect.Value, seen map[valuePair]bool) bool {
 		if a.NumField() != b.NumField() {
 			return false
 		}
+
 		for i := range a.NumField() {
 			if !equalValue(a.Field(i), b.Field(i), seen) {
 				return false
 			}
 		}
+
 		return true
 	}
+
 	if a.Len() != b.Len() {
 		return false
 	}
+
 	for i := range a.Len() {
 		if !equalValue(a.Index(i), b.Index(i), seen) {
 			return false
 		}
 	}
+
 	return true
 }
 
@@ -137,17 +158,22 @@ func equalMaps(a, b reflect.Value, seen map[valuePair]bool) bool {
 	if !sameNil(a, b) {
 		return false
 	}
+
 	if a.IsNil() || a.UnsafePointer() == b.UnsafePointer() {
 		return true
 	}
+
 	if a.Len() != b.Len() {
 		return a.IsNil()
 	}
+
 	p := valuePair{a: uintptr(a.UnsafePointer()), b: uintptr(b.UnsafePointer()), typ: a.Type()}
 	if seen[p] {
 		return true
 	}
+
 	seen[p] = true
+
 	iter := a.MapRange()
 	for iter.Next() {
 		value := b.MapIndex(iter.Key())
@@ -155,6 +181,7 @@ func equalMaps(a, b reflect.Value, seen map[valuePair]bool) bool {
 			return false
 		}
 	}
+
 	return true
 }
 

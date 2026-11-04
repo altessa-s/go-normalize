@@ -24,10 +24,12 @@ func UTC(v reflect.Value, _ map[string]string) ModifierResult {
 // PostgreSQL. A missing or non-positive unit fails with ErrInvalidParameter.
 func TruncateTime(v reflect.Value, params map[string]string) ModifierResult {
 	raw := params["unit"]
+
 	unit, err := parseUnit(raw)
 	if err != nil || unit <= 0 {
 		return invalidParameter(v, "unit must be a positive duration such as 1s or ms, got %q", raw)
 	}
+
 	return ApplyModifier(v, func(t time.Time) (time.Time, bool) {
 		r := t.Truncate(unit)
 		return r, !r.Equal(t)
@@ -38,5 +40,6 @@ func parseUnit(s string) (time.Duration, error) {
 	if s != "" && !unicode.IsDigit(rune(s[0])) {
 		s = "1" + s
 	}
+
 	return time.ParseDuration(s)
 }

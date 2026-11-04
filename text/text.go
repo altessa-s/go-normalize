@@ -26,6 +26,7 @@ func Register(registry Registrar) {
 	if registry == nil {
 		return
 	}
+
 	registry.Register("nfc", NFC)
 	registry.Register("nfkc", NFKC)
 	registry.Register("fold", Fold)
@@ -52,6 +53,7 @@ func normalizeForm(v reflect.Value, form norm.Form) modifiers.ModifierResult {
 		if form.IsNormalString(s) {
 			return s, false
 		}
+
 		return form.String(s), true
 	})
 }
@@ -68,6 +70,7 @@ func Fold(v reflect.Value, _ map[string]string) modifiers.ModifierResult {
 // An invalid tag fails with modifiers.ErrInvalidParameter.
 func Title(v reflect.Value, params map[string]string) modifiers.ModifierResult {
 	tag := language.Und
+
 	if raw, ok := params["lang"]; ok {
 		parsed, err := language.Parse(raw)
 		if err != nil {
@@ -75,8 +78,10 @@ func Title(v reflect.Value, params map[string]string) modifiers.ModifierResult {
 				Cause: fmt.Errorf("%w: lang must be a BCP 47 tag, got %q", modifiers.ErrInvalidParameter, raw),
 			}}
 		}
+
 		tag = parsed
 	}
+
 	return applyCaser(v, cases.Title(tag))
 }
 

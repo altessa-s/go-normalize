@@ -18,25 +18,31 @@ import (
 func newRegistry() *modifiers.Registry {
 	r := modifiers.NewRegistry()
 	text.Register(r)
+
 	return r
 }
 
 func apply(t *testing.T, r *modifiers.Registry, name string, params map[string]string, input string) string {
 	t.Helper()
+
 	m, ok := r.Get(name)
 	if !ok {
 		t.Fatalf("%s is not registered", name)
 	}
+
 	s := input
 	if out := m(reflect.ValueOf(&s).Elem(), params); out.Error != nil {
 		t.Fatal(out.Error)
 	}
+
 	return s
 }
 
 func TestModifiers(t *testing.T) {
 	t.Parallel()
+
 	r := newRegistry()
+
 	cases := []struct {
 		modifier string
 		params   map[string]string
@@ -61,6 +67,7 @@ func TestModifiers(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.modifier+"/"+tc.input, func(t *testing.T) {
 			t.Parallel()
+
 			if got := apply(t, r, tc.modifier, tc.params, tc.input); got != tc.want {
 				t.Fatalf("%s(%q) = %q, want %q", tc.modifier, tc.input, got, tc.want)
 			}
@@ -70,7 +77,9 @@ func TestModifiers(t *testing.T) {
 
 func TestTitleRejectsInvalidLanguage(t *testing.T) {
 	t.Parallel()
+
 	s := "hello"
+
 	out := text.Title(reflect.ValueOf(&s).Elem(), map[string]string{"lang": "not a tag"})
 	if !errors.Is(out.Error, modifiers.ErrInvalidParameter) || s != "hello" {
 		t.Fatalf("got %v, value %q", out.Error, s)
@@ -80,15 +89,19 @@ func TestTitleRejectsInvalidLanguage(t *testing.T) {
 func TestRegisterThroughNormalize(t *testing.T) {
 	t.Parallel()
 	text.Register(nil)
+
 	r := newRegistry()
+
 	type account struct {
 		Login *string `normalize:"nfkc,fold"`
 		Name  string  `normalize:"nfc,title"`
 	}
+
 	a := account{Login: new("\uff21\uff24\uff2d\uff29\uff2e"), Name: "jos\u00e9"}
 	if err := normalize.NormalizeWithRegistry(&a, r); err != nil {
 		t.Fatal(err)
 	}
+
 	if *a.Login != "admin" || a.Name != "Jos\u00e9" {
 		t.Fatalf("got %q, %q", *a.Login, a.Name)
 	}
@@ -98,7 +111,9 @@ func TestRegisterThroughNormalize(t *testing.T) {
 // shared between calls would race.
 func TestCasersAreNotShared(t *testing.T) {
 	t.Parallel()
+
 	r := newRegistry()
+
 	var wg sync.WaitGroup
 	for range 8 {
 		wg.Go(func() {
@@ -106,6 +121,7 @@ func TestCasersAreNotShared(t *testing.T) {
 				type v struct {
 					S string `normalize:"title(lang=en),fold"`
 				}
+
 				x := v{S: "Hello Stra\u00dfe"}
 				if err := normalize.NormalizeWithRegistry(&x, r); err != nil || x.S != "hello strasse" {
 					t.Errorf("got %q, %v", x.S, err)
@@ -114,5 +130,6 @@ func TestCasersAreNotShared(t *testing.T) {
 			}
 		})
 	}
+
 	wg.Wait()
 }

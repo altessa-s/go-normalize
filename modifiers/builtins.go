@@ -30,14 +30,18 @@ func clearInnermost(v reflect.Value, empty func(reflect.Value) bool) ModifierRes
 	if !v.IsValid() || v.Kind() != reflect.Pointer {
 		return ModifierResult{Value: v}
 	}
+
 	if !v.CanSet() {
 		root, _, _, ok := copyChain(v, false)
 		if ok && clearPointer(root, empty) {
 			return ModifierResult{Value: root}
 		}
+
 		return ModifierResult{Value: v}
 	}
+
 	clearPointer(v, empty)
+
 	return ModifierResult{Value: v}
 }
 
@@ -45,10 +49,13 @@ func clearPointer(p reflect.Value, empty func(reflect.Value) bool) bool {
 	for !p.IsNil() && p.Elem().Kind() == reflect.Pointer {
 		p = p.Elem()
 	}
+
 	if p.IsNil() || !empty(p.Elem()) {
 		return false
 	}
+
 	p.Set(reflect.Zero(p.Type()))
+
 	return true
 }
 
@@ -57,26 +64,33 @@ func RemoveEmptyElements(v reflect.Value, _ map[string]string) ModifierResult {
 	if !v.IsValid() || v.Kind() != reflect.Slice || !v.CanSet() {
 		return ModifierResult{Value: v}
 	}
+
 	e := v.Type().Elem()
 	if e.Kind() != reflect.String && (e.Kind() != reflect.Pointer || e.Elem().Kind() != reflect.String) {
 		return ModifierResult{Value: v}
 	}
+
 	first := 0
 	for first < v.Len() && keepElement(v.Index(first), e.Kind() == reflect.Pointer) {
 		first++
 	}
+
 	if first == v.Len() {
 		return ModifierResult{Value: v}
 	}
+
 	n := reflect.MakeSlice(v.Type(), first, v.Len()-1)
 	reflect.Copy(n, v.Slice(0, first))
+
 	for i := first + 1; i < v.Len(); i++ {
 		x := v.Index(i)
 		if keepElement(x, e.Kind() == reflect.Pointer) {
 			n = reflect.Append(n, x)
 		}
 	}
+
 	v.Set(n)
+
 	return ModifierResult{Value: v}
 }
 
@@ -84,6 +98,7 @@ func keepElement(v reflect.Value, pointer bool) bool {
 	if pointer {
 		return !v.IsNil() && strings.TrimSpace(v.Elem().String()) != ""
 	}
+
 	return strings.TrimSpace(v.String()) != ""
 }
 
@@ -94,11 +109,13 @@ func RemoveBadSymbols(v reflect.Value, _ map[string]string) ModifierResult {
 			if isBadSymbol(r) {
 				return -1
 			}
+
 			return r
 		}, s)
 		if n == "" && s != "" {
 			return s, false
 		}
+
 		return n, n != s
 	})
 }
@@ -107,6 +124,7 @@ func isBadSymbol(r rune) bool {
 	if unicode.IsControl(r) {
 		return true
 	}
+
 	switch r {
 	case '\u0340', '\u0341', '\u17a3', '\u17d3',
 		'\u2028', '\u2029', '\u202a', '\u202b', '\u202c', '\u202d', '\u202e',
@@ -114,6 +132,7 @@ func isBadSymbol(r rune) bool {
 		'\ufff9', '\ufffa', '\ufffb', '\ufeff', '\ufffc':
 		return true
 	}
+
 	return r >= 0x1d173 && r <= 0x1d17a || r >= 0xe0000 && r <= 0xe007f
 }
 
@@ -128,35 +147,45 @@ func collapseSpaces(s string) (string, bool) {
 	if !needsCollapse(s) {
 		return s, false
 	}
+
 	var b strings.Builder
 	b.Grow(len(s))
+
 	inSpace := false
+
 	for i := 0; i < len(s); {
 		r, size := utf8.DecodeRuneInString(s[i:])
 		if unicode.IsSpace(r) {
 			if !inSpace {
 				b.WriteByte(' ')
 			}
+
 			inSpace = true
 		} else {
 			b.WriteString(s[i : i+size])
+
 			inSpace = false
 		}
+
 		i += size
 	}
+
 	return b.String(), true
 }
 
 // needsCollapse reports whether s has white space other than single ASCII spaces.
 func needsCollapse(s string) bool {
 	inSpace := false
+
 	for _, r := range s {
 		space := unicode.IsSpace(r)
 		if space && (inSpace || r != ' ') {
 			return true
 		}
+
 		inSpace = space
 	}
+
 	return false
 }
 
@@ -165,10 +194,12 @@ func needsCollapse(s string) bool {
 // fails with ErrInvalidParameter.
 func Truncate(v reflect.Value, params map[string]string) ModifierResult {
 	raw, ok := params["max"]
+
 	limit, err := strconv.Atoi(raw)
 	if !ok || err != nil || limit < 0 {
 		return invalidParameter(v, "max must be a non-negative integer, got %q", raw)
 	}
+
 	return ApplyStringModifier(v, func(s string) (string, bool) { return truncateRunes(s, limit) })
 }
 
@@ -176,13 +207,16 @@ func truncateRunes(s string, limit int) (string, bool) {
 	if len(s) <= limit {
 		return s, false
 	}
+
 	count := 0
 	for i := range s {
 		if count == limit {
 			return s[:i], true
 		}
+
 		count++
 	}
+
 	return s, false
 }
 
@@ -193,8 +227,10 @@ func DigitsOnly(v reflect.Value, _ map[string]string) ModifierResult {
 			if r >= '0' && r <= '9' {
 				return r
 			}
+
 			return -1
 		}, s)
+
 		return n, n != s
 	})
 }
@@ -213,6 +249,7 @@ func normalizeEmail(s string) (string, bool) {
 			n = local + "@" + lower
 		}
 	}
+
 	return n, n != s
 }
 
@@ -230,17 +267,21 @@ func EmptyOnNil(v reflect.Value, _ map[string]string) ModifierResult {
 	if !v.IsValid() || v.Kind() != reflect.Pointer {
 		return ModifierResult{Value: v}
 	}
+
 	if !v.CanSet() {
 		if root, _, filled, _ := copyChain(v, true); filled {
 			return ModifierResult{Value: root}
 		}
+
 		return ModifierResult{Value: v}
 	}
+
 	for p := v; p.Kind() == reflect.Pointer; p = p.Elem() {
 		if p.IsNil() {
 			p.Set(reflect.New(p.Type().Elem()))
 		}
 	}
+
 	return ModifierResult{Value: v}
 }
 
@@ -252,12 +293,14 @@ func Dedupe(v reflect.Value, _ map[string]string) ModifierResult {
 	if !v.IsValid() || v.Kind() != reflect.Slice || !v.CanSet() || v.Len() < 2 {
 		return ModifierResult{Value: v}
 	}
+
 	switch kind := v.Type().Elem().Kind(); {
 	case kind == reflect.String:
 		dedupe(v, reflect.Value.String)
 	case isBasic(kind):
 		dedupe(v, reflect.Value.Interface)
 	}
+
 	return ModifierResult{Value: v}
 }
 
@@ -266,27 +309,35 @@ func Dedupe(v reflect.Value, _ map[string]string) ModifierResult {
 func dedupe[K comparable](v reflect.Value, key func(reflect.Value) K) {
 	seen := make(map[K]struct{}, v.Len())
 	first := -1
+
 	for i := range v.Len() {
 		k := key(v.Index(i))
 		if _, ok := seen[k]; ok {
 			first = i
 			break
 		}
+
 		seen[k] = struct{}{}
 	}
+
 	if first < 0 {
 		return
 	}
+
 	n := reflect.MakeSlice(v.Type(), first, v.Len()-1)
 	reflect.Copy(n, v.Slice(0, first))
+
 	for i := first + 1; i < v.Len(); i++ {
 		x := v.Index(i)
+
 		k := key(x)
 		if _, ok := seen[k]; ok {
 			continue
 		}
+
 		seen[k] = struct{}{}
 		n = reflect.Append(n, x)
 	}
+
 	v.Set(n)
 }

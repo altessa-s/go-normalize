@@ -18,13 +18,16 @@ import (
 func TestRegisterAndNormalize(t *testing.T) {
 	r := modifiers.NewRegistry()
 	phone.Register(r)
+
 	type contact struct {
 		Number string `normalize:"phone(region=US)"`
 	}
+
 	v := contact{Number: "202-555-0123"}
 	if err := normalize.NormalizeWithRegistry(&v, r); err != nil {
 		t.Fatal(err)
 	}
+
 	if v.Number != "+12025550123" {
 		t.Fatalf("got %q", v.Number)
 	}
@@ -32,24 +35,32 @@ func TestRegisterAndNormalize(t *testing.T) {
 
 func TestNormalizePhonePointerAndInvalid(t *testing.T) {
 	t.Parallel()
+
 	r := modifiers.NewRegistry()
 	phone.Register(r)
+
 	type contact struct {
 		Phone *string `normalize:"phone(region=us)"`
 	}
+
 	raw := "202-555-0123"
+
 	v := contact{Phone: &raw}
 	if err := normalize.NormalizeWithRegistry(&v, r); err != nil {
 		t.Fatal(err)
 	}
+
 	if *v.Phone != "+12025550123" {
 		t.Fatalf("got %q", *v.Phone)
 	}
+
 	bad := contact{Phone: &raw}
+
 	*bad.Phone = "not a phone"
 	if err := normalize.NormalizeWithRegistry(&bad, r); err == nil {
 		t.Fatal("invalid number accepted")
 	}
+
 	empty := contact{}
 	if err := normalize.NormalizeWithRegistry(&empty, r); err != nil {
 		t.Fatal(err)
@@ -58,11 +69,14 @@ func TestNormalizePhonePointerAndInvalid(t *testing.T) {
 
 func TestPhoneErrorDoesNotRetainNumber(t *testing.T) {
 	t.Parallel()
+
 	r := modifiers.NewRegistry()
 	phone.Register(r)
+
 	type contact struct {
 		Phone string `normalize:"phone(region=US)"`
 	}
+
 	err := normalize.NormalizeWithRegistry(&contact{Phone: "555-0101"}, r)
 	if err == nil || strings.Contains(err.Error(), "555-0101") {
 		t.Fatalf("number leaked or error missing: %v", err)
@@ -71,6 +85,7 @@ func TestPhoneErrorDoesNotRetainNumber(t *testing.T) {
 
 func TestNormalizePhoneRegionsAndFormats(t *testing.T) {
 	t.Parallel()
+
 	cases := []struct {
 		value  string
 		region string
@@ -93,17 +108,22 @@ func (r recordingRegistrar) Register(name string, modifier modifiers.Modifier) {
 
 func TestRegisterAcceptsAnyRegistrar(t *testing.T) {
 	t.Parallel()
+
 	r := recordingRegistrar{}
 	phone.Register(r)
+
 	if _, ok := r["phone"]; !ok {
 		t.Fatal("phone modifier was not registered")
 	}
+
 	phone.Register(nil)
 }
 
 func TestNormalizePhoneIgnoresUnsupportedValues(t *testing.T) {
 	t.Parallel()
+
 	var nilPhone *string
+
 	cases := []struct {
 		name  string
 		value reflect.Value
@@ -117,10 +137,12 @@ func TestNormalizePhoneIgnoresUnsupportedValues(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
+
 			result := phone.NormalizePhone(tc.value, nil)
 			if result.Error != nil {
 				t.Fatalf("unexpected error: %v", result.Error)
 			}
+
 			if result.Value.IsValid() != tc.value.IsValid() {
 				t.Fatalf("value validity changed: %v", result.Value)
 			}
@@ -130,17 +152,22 @@ func TestNormalizePhoneIgnoresUnsupportedValues(t *testing.T) {
 
 func TestNormalizePhoneNonSettableValues(t *testing.T) {
 	t.Parallel()
+
 	params := map[string]string{"region": "US"}
+
 	formatted := phone.NormalizePhone(reflect.ValueOf("+12025550123"), params)
 	if formatted.Error != nil || formatted.Value.String() != "+12025550123" {
 		t.Fatalf("E.164 input: %v, %v", formatted.Value, formatted.Error)
 	}
+
 	raw := "202-555-0123"
 	pointer := reflect.ValueOf(&raw)
+
 	result := phone.NormalizePhone(pointer, params)
 	if result.Error != nil || result.Value.Elem().String() != "+12025550123" {
 		t.Fatalf("pointer input: %v, %v", result.Value, result.Error)
 	}
+
 	if raw != "202-555-0123" {
 		t.Fatalf("non-settable pointer target was modified: %q", raw)
 	}
@@ -148,6 +175,7 @@ func TestNormalizePhoneNonSettableValues(t *testing.T) {
 
 func TestNormalizePhoneCachesFailures(t *testing.T) {
 	t.Parallel()
+
 	params := map[string]string{"region": "US"}
 	for range 2 {
 		result := phone.NormalizePhone(reflect.ValueOf("555-0199"), params)

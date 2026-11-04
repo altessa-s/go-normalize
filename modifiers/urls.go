@@ -25,6 +25,7 @@ func URL(v reflect.Value, _ map[string]string) ModifierResult {
 
 func normalizeURL(s string) (string, bool) {
 	n := strings.TrimSpace(s)
+
 	u, err := url.Parse(n)
 	if err != nil || u.Scheme == "" || u.Host == "" || u.Opaque != "" {
 		return n, n != s
@@ -32,21 +33,27 @@ func normalizeURL(s string) (string, bool) {
 	// Lower-case the scheme here rather than rely on url.Parse doing so; the
 	// default-port and root-path rules below depend on it.
 	u.Scheme = strings.ToLower(u.Scheme)
+
 	host, port := lowerHost(u.Hostname()), u.Port()
 	if port == defaultPorts[u.Scheme] {
 		port = ""
 	}
+
 	if strings.Contains(host, ":") {
 		host = "[" + host + "]"
 	}
+
 	if port != "" {
 		host += ":" + port
 	}
+
 	u.Host = host
 	if u.Path == "" && (u.Scheme == "http" || u.Scheme == "https") {
 		u.Path = "/"
 	}
+
 	out := u.String()
+
 	return out, out != s
 }
 
@@ -57,5 +64,6 @@ func lowerHost(host string) string {
 	if !ok {
 		return strings.ToLower(host)
 	}
+
 	return strings.ToLower(addr) + "%" + zone
 }

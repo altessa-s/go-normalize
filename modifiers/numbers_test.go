@@ -15,7 +15,9 @@ import (
 
 func TestClamp(t *testing.T) {
 	t.Parallel()
+
 	type level int8
+
 	cases := []struct {
 		name   string
 		params map[string]string
@@ -37,14 +39,18 @@ func TestClamp(t *testing.T) {
 		{name: "string ignored", params: map[string]string{"max": "1"}, input: "99", want: "99"},
 	}
 	clamp := must(modifiers.DefaultRegistry().Get("clamp"))
+
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
+
 			v := reflect.New(reflect.TypeOf(tc.input)).Elem()
 			v.Set(reflect.ValueOf(tc.input))
+
 			if out := clamp(v, tc.params); out.Error != nil {
 				t.Fatal(out.Error)
 			}
+
 			if got := v.Interface(); got != tc.want {
 				t.Fatalf("clamp(%v) = %v (%T), want %v (%T)", tc.input, got, got, tc.want, tc.want)
 			}
@@ -54,8 +60,10 @@ func TestClamp(t *testing.T) {
 
 func TestClampPointersAndNaN(t *testing.T) {
 	t.Parallel()
+
 	params := map[string]string{"min": "0", "max": "10"}
 	n := 20
+
 	v := struct {
 		Pointer *int
 		Nil     *int
@@ -66,10 +74,13 @@ func TestClampPointersAndNaN(t *testing.T) {
 			t.Fatal(out.Error)
 		}
 	}
+
 	if n != 10 || v.Nil != nil || !math.IsNaN(v.NaN) {
 		t.Fatalf("unexpected result: n=%d %+v", n, v)
 	}
+
 	original := 20
+
 	out := modifiers.Clamp(reflect.ValueOf(&original), params)
 	if out.Value.Elem().Int() != 10 || original != 20 {
 		t.Fatalf("non-settable pointer: got %v, original %d", out.Value.Elem(), original)
@@ -78,6 +89,7 @@ func TestClampPointersAndNaN(t *testing.T) {
 
 func TestClampRejectsInvalidBounds(t *testing.T) {
 	t.Parallel()
+
 	cases := []struct {
 		name   string
 		params map[string]string
@@ -94,12 +106,15 @@ func TestClampRejectsInvalidBounds(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
+
 			v := reflect.New(reflect.TypeOf(tc.input)).Elem()
 			v.Set(reflect.ValueOf(tc.input))
+
 			out := modifiers.Clamp(v, tc.params)
 			if !errors.Is(out.Error, modifiers.ErrInvalidParameter) {
 				t.Fatalf("got %v, want ErrInvalidParameter", out.Error)
 			}
+
 			if v.Interface() != tc.input {
 				t.Fatalf("value changed to %v", v.Interface())
 			}

@@ -17,10 +17,13 @@ import (
 func BenchmarkPhone(b *testing.B) {
 	r := modifiers.NewRegistry()
 	phone.Register(r)
+
 	type contact struct {
 		Phone string `normalize:"phone(region=US)"`
 	}
+
 	b.ReportAllocs()
+
 	for b.Loop() {
 		v := contact{Phone: "2025550123"}
 		if err := normalize.NormalizeWithRegistry(&v, r); err != nil {
@@ -31,9 +34,12 @@ func BenchmarkPhone(b *testing.B) {
 
 func BenchmarkNormalizePhone(b *testing.B) {
 	params := map[string]string{"region": "US"}
+
 	b.Run("cached", func(b *testing.B) {
 		v := reflect.ValueOf("(202) 555-0123")
+
 		b.ReportAllocs()
+
 		for b.Loop() {
 			if out := phone.NormalizePhone(v, params); out.Error != nil {
 				b.Fatal(out.Error)
@@ -46,7 +52,9 @@ func BenchmarkNormalizePhone(b *testing.B) {
 		for i := range numbers {
 			numbers[i] = reflect.ValueOf(fmt.Sprintf("(202) 555-%04d", i))
 		}
+
 		b.ReportAllocs()
+
 		i := 0
 		for b.Loop() {
 			_ = phone.NormalizePhone(numbers[i%len(numbers)], params)
@@ -55,7 +63,9 @@ func BenchmarkNormalizePhone(b *testing.B) {
 	})
 	b.Run("invalid", func(b *testing.B) {
 		v := reflect.ValueOf("not a phone")
+
 		b.ReportAllocs()
+
 		for b.Loop() {
 			if out := phone.NormalizePhone(v, params); out.Error == nil {
 				b.Fatal("invalid number accepted")
@@ -67,6 +77,7 @@ func BenchmarkNormalizePhone(b *testing.B) {
 func BenchmarkNormalizePhoneParallel(b *testing.B) {
 	params := map[string]string{"region": "US"}
 	v := reflect.ValueOf("202-555-0123")
+
 	b.ReportAllocs()
 	b.RunParallel(func(pb *testing.PB) {
 		for pb.Next() {
