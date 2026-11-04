@@ -13,7 +13,7 @@ import (
 )
 
 // applyNamed runs the default-registry modifier name on a settable copy of input.
-func applyNamed(t *testing.T, name string, params map[string]string, input string) (string, *modifiers.ModifierError) {
+func applyNamed(t *testing.T, name string, params map[string]string, input string) (string, error) {
 	t.Helper()
 
 	m, ok := modifiers.DefaultRegistry().Get(name)
@@ -24,7 +24,7 @@ func applyNamed(t *testing.T, name string, params map[string]string, input strin
 	s := input
 	out := m(reflect.ValueOf(&s).Elem(), params)
 
-	return s, out.Error
+	return s, out.Err
 }
 
 func TestStringModifiers(t *testing.T) {

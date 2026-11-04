@@ -15,9 +15,23 @@ import (
 	"github.com/altessa-s/go-normalize/phone"
 )
 
+// newModifier returns the phone modifier with defaultRegion.
+func newModifier(t testing.TB, defaultRegion string) modifiers.Modifier {
+	t.Helper()
+
+	m, err := phone.New(defaultRegion)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	return m
+}
+
 func TestRegisterAndNormalize(t *testing.T) {
 	r := modifiers.NewRegistry()
-	phone.Register(r)
+	if err := phone.Register(r, "US"); err != nil {
+		t.Fatal(err)
+	}
 
 	type contact struct {
 		Number string `normalize:"phone(region=US)"`
@@ -33,11 +47,13 @@ func TestRegisterAndNormalize(t *testing.T) {
 	}
 }
 
-func TestNormalizePhonePointerAndInvalid(t *testing.T) {
+func TestPhonePointerAndInvalid(t *testing.T) {
 	t.Parallel()
 
 	r := modifiers.NewRegistry()
-	phone.Register(r)
+	if err := phone.Register(r, "US"); err != nil {
+		t.Fatal(err)
+	}
 
 	type contact struct {
 		Phone *string `normalize:"phone(region=us)"`
@@ -71,7 +87,9 @@ func TestPhoneErrorDoesNotRetainNumber(t *testing.T) {
 	t.Parallel()
 
 	r := modifiers.NewRegistry()
-	phone.Register(r)
+	if err := phone.Register(r, "US"); err != nil {
+		t.Fatal(err)
+	}
 
 	type contact struct {
 		Phone string `normalize:"phone(region=US)"`
@@ -83,7 +101,7 @@ func TestPhoneErrorDoesNotRetainNumber(t *testing.T) {
 	}
 }
 
-func TestNormalizePhoneRegionsAndFormats(t *testing.T) {
+func TestPhoneRegionsAndFormats(t *testing.T) {
 	t.Parallel()
 
 	cases := []struct {
@@ -94,32 +112,106 @@ func TestNormalizePhoneRegionsAndFormats(t *testing.T) {
 		{value: "+7 (916) 123-45-67", want: "+79161234567"},
 		{value: "202.555.0123", region: "us", want: "+12025550123"},
 	}
+	m := newModifier(t, "RU")
+
 	for _, tc := range cases {
-		result := phone.NormalizePhone(reflect.ValueOf(tc.value), map[string]string{"region": tc.region})
-		if result.Error != nil || result.Value.String() != tc.want {
-			t.Fatalf("NormalizePhone(%q, %q) = %q, %v; want %q", tc.value, tc.region, result.Value.String(), result.Error, tc.want)
+		var params map[string]string
+		if tc.region != "" {
+			params = map[string]string{"region": tc.region}
+		}
+
+		result := m(reflect.ValueOf(tc.value), params)
+		if result.Err != nil || result.Value.String() != tc.want {
+			t.Fatalf("phone(%q, %q) = %q, %v; want %q", tc.value, tc.region, result.Value.String(), result.Err, tc.want)
 		}
 	}
 }
 
 type recordingRegistrar map[string]modifiers.Modifier
 
-func (r recordingRegistrar) Register(name string, modifier modifiers.Modifier) { r[name] = modifier }
+func (r recordingRegistrar) Register(name string, modifier modifiers.Modifier) error {
+	r[name] = modifier
+	return nil
+}
 
 func TestRegisterAcceptsAnyRegistrar(t *testing.T) {
 	t.Parallel()
 
 	r := recordingRegistrar{}
-	phone.Register(r)
+	if err := phone.Register(r, "us"); err != nil {
+		t.Fatal(err)
+	}
 
 	if _, ok := r["phone"]; !ok {
 		t.Fatal("phone modifier was not registered")
 	}
 
-	phone.Register(nil)
+	if err := phone.Register(nil, "US"); !errors.Is(err, modifiers.ErrInvalidRegistration) {
+		t.Fatalf("Register(nil) = %v, want ErrInvalidRegistration", err)
+	}
 }
 
-func TestNormalizePhoneIgnoresUnsupportedValues(t *testing.T) {
+func TestRegisterRequiresSupportedDefaultRegion(t *testing.T) {
+	t.Parallel()
+
+	for _, region := range []string{"", "ZZ", "USA", "001"} {
+		r := recordingRegistrar{}
+		if err := phone.Register(r, region); !errors.Is(err, phone.ErrUnsupportedRegion) {
+			t.Fatalf("Register(%q) = %v, want ErrUnsupportedRegion", region, err)
+		}
+
+		if len(r) != 0 {
+			t.Fatalf("Register(%q) registered a modifier", region)
+		}
+	}
+}
+
+func TestTagRegionOverridesDefault(t *testing.T) {
+	t.Parallel()
+
+	m := newModifier(t, "US")
+
+	result := m(reflect.ValueOf("030 1234567"), map[string]string{"region": " de "})
+	if result.Err != nil || result.Value.String() != "+49301234567" {
+		t.Fatalf("got %v, %v", result.Value, result.Err)
+	}
+
+	for _, region := range []string{"", "ZZ"} {
+		result := m(reflect.ValueOf("2025550123"), map[string]string{"region": region})
+		if !errors.Is(result.Err, modifiers.ErrInvalidParameter) || !errors.Is(result.Err, phone.ErrUnsupportedRegion) {
+			t.Fatalf("region %q: got %v, want ErrInvalidParameter and ErrUnsupportedRegion", region, result.Err)
+		}
+	}
+}
+
+func TestPhoneFollowsPointerChains(t *testing.T) {
+	t.Parallel()
+
+	m := newModifier(t, "US")
+
+	raw := "202-555-0123"
+	inner := &raw
+	outer := &inner
+
+	original := *outer
+	if result := m(reflect.ValueOf(&outer).Elem(), nil); result.Err != nil {
+		t.Fatal(result.Err)
+	}
+
+	if *outer != original || **outer != "+12025550123" {
+		t.Fatalf("got %q at %p, want the number rewritten in place at %p", **outer, *outer, original)
+	}
+
+	formatted := "+12025550123"
+	same := &formatted
+
+	before := same
+	if result := m(reflect.ValueOf(&same).Elem(), nil); result.Err != nil || same != before {
+		t.Fatalf("an unchanged number replaced the pointer: %v", result.Err)
+	}
+}
+
+func TestPhoneIgnoresUnsupportedValues(t *testing.T) {
 	t.Parallel()
 
 	var nilPhone *string
@@ -138,9 +230,9 @@ func TestNormalizePhoneIgnoresUnsupportedValues(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 
-			result := phone.NormalizePhone(tc.value, nil)
-			if result.Error != nil {
-				t.Fatalf("unexpected error: %v", result.Error)
+			result := newModifier(t, "US")(tc.value, nil)
+			if result.Err != nil {
+				t.Fatalf("unexpected error: %v", result.Err)
 			}
 
 			if result.Value.IsValid() != tc.value.IsValid() {
@@ -150,22 +242,23 @@ func TestNormalizePhoneIgnoresUnsupportedValues(t *testing.T) {
 	}
 }
 
-func TestNormalizePhoneNonSettableValues(t *testing.T) {
+func TestPhoneNonSettableValues(t *testing.T) {
 	t.Parallel()
 
 	params := map[string]string{"region": "US"}
+	m := newModifier(t, "RU")
 
-	formatted := phone.NormalizePhone(reflect.ValueOf("+12025550123"), params)
-	if formatted.Error != nil || formatted.Value.String() != "+12025550123" {
-		t.Fatalf("E.164 input: %v, %v", formatted.Value, formatted.Error)
+	formatted := m(reflect.ValueOf("+12025550123"), params)
+	if formatted.Err != nil || formatted.Value.String() != "+12025550123" {
+		t.Fatalf("E.164 input: %v, %v", formatted.Value, formatted.Err)
 	}
 
 	raw := "202-555-0123"
 	pointer := reflect.ValueOf(&raw)
 
-	result := phone.NormalizePhone(pointer, params)
-	if result.Error != nil || result.Value.Elem().String() != "+12025550123" {
-		t.Fatalf("pointer input: %v, %v", result.Value, result.Error)
+	result := m(pointer, params)
+	if result.Err != nil || result.Value.Elem().String() != "+12025550123" {
+		t.Fatalf("pointer input: %v, %v", result.Value, result.Err)
 	}
 
 	if raw != "202-555-0123" {
@@ -173,14 +266,14 @@ func TestNormalizePhoneNonSettableValues(t *testing.T) {
 	}
 }
 
-func TestNormalizePhoneCachesFailures(t *testing.T) {
+func TestPhoneCachesFailures(t *testing.T) {
 	t.Parallel()
 
-	params := map[string]string{"region": "US"}
+	m := newModifier(t, "US")
 	for range 2 {
-		result := phone.NormalizePhone(reflect.ValueOf("555-0199"), params)
-		if !errors.Is(result.Error, phone.ErrInvalidPhone) {
-			t.Fatalf("got %v, want ErrInvalidPhone", result.Error)
+		result := m(reflect.ValueOf("555-0199"), nil)
+		if !errors.Is(result.Err, phone.ErrInvalidPhone) {
+			t.Fatalf("got %v, want ErrInvalidPhone", result.Err)
 		}
 	}
 }

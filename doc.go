@@ -32,6 +32,6 @@
 // # Errors
 //
 // ErrInvalidInput, ErrModifierNotFound and ErrNonReflexiveMapKey report
-// misuse; modifier failures are *modifiers.ModifierError values carrying the
+// misuse; modifier failures are *modifiers.Error values carrying the
 // field path. Map keys appear in paths as {key}.
 package normalize

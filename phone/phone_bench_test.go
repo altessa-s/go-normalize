@@ -16,7 +16,9 @@ import (
 
 func BenchmarkPhone(b *testing.B) {
 	r := modifiers.NewRegistry()
-	phone.Register(r)
+	if err := phone.Register(r, "US"); err != nil {
+		b.Fatal(err)
+	}
 
 	type contact struct {
 		Phone string `normalize:"phone(region=US)"`
@@ -32,8 +34,9 @@ func BenchmarkPhone(b *testing.B) {
 	}
 }
 
-func BenchmarkNormalizePhone(b *testing.B) {
+func BenchmarkPhoneModifier(b *testing.B) {
 	params := map[string]string{"region": "US"}
+	m := newModifier(b, "RU")
 
 	b.Run("cached", func(b *testing.B) {
 		v := reflect.ValueOf("(202) 555-0123")
@@ -41,8 +44,8 @@ func BenchmarkNormalizePhone(b *testing.B) {
 		b.ReportAllocs()
 
 		for b.Loop() {
-			if out := phone.NormalizePhone(v, params); out.Error != nil {
-				b.Fatal(out.Error)
+			if out := m(v, params); out.Err != nil {
+				b.Fatal(out.Err)
 			}
 		}
 	})
@@ -57,7 +60,7 @@ func BenchmarkNormalizePhone(b *testing.B) {
 
 		i := 0
 		for b.Loop() {
-			_ = phone.NormalizePhone(numbers[i%len(numbers)], params)
+			_ = m(numbers[i%len(numbers)], params)
 			i++
 		}
 	})
@@ -67,22 +70,23 @@ func BenchmarkNormalizePhone(b *testing.B) {
 		b.ReportAllocs()
 
 		for b.Loop() {
-			if out := phone.NormalizePhone(v, params); out.Error == nil {
+			if out := m(v, params); out.Err == nil {
 				b.Fatal("invalid number accepted")
 			}
 		}
 	})
 }
 
-func BenchmarkNormalizePhoneParallel(b *testing.B) {
+func BenchmarkPhoneModifierParallel(b *testing.B) {
 	params := map[string]string{"region": "US"}
+	m := newModifier(b, "RU")
 	v := reflect.ValueOf("202-555-0123")
 
 	b.ReportAllocs()
 	b.RunParallel(func(pb *testing.PB) {
 		for pb.Next() {
-			if out := phone.NormalizePhone(v, params); out.Error != nil {
-				b.Error(out.Error)
+			if out := m(v, params); out.Err != nil {
+				b.Error(out.Err)
 				return
 			}
 		}

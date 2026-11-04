@@ -5,11 +5,23 @@
 package modifiers
 
 import (
+	"errors"
+	"fmt"
 	"maps"
 	"strings"
 	"sync"
 	"sync/atomic"
 )
+
+// ErrInvalidRegistration reports a Register call on a nil registry, with an
+// empty name or with a nil modifier.
+var ErrInvalidRegistration = errors.New("modifiers: invalid registration")
+
+// Registrar accepts modifier registrations. *Registry implements it, and the
+// Register functions of the phone, text and idna modules take one.
+type Registrar interface {
+	Register(name string, modifier Modifier) error
+}
 
 // Registry stores modifier functions and is safe for concurrent use. Lookups
 // never block: Register publishes a new copy of the table, so registration is
@@ -22,10 +34,17 @@ type Registry struct {
 // NewRegistry creates an empty registry.
 func NewRegistry() *Registry { return &Registry{} }
 
-// Register adds or replaces a modifier.
-func (r *Registry) Register(name string, modifier Modifier) {
-	if r == nil || name == "" || modifier == nil {
-		return
+// Register adds a modifier under name, replacing any modifier already
+// registered under it. A nil registry, an empty name or a nil modifier fails
+// with ErrInvalidRegistration.
+func (r *Registry) Register(name string, modifier Modifier) error {
+	switch {
+	case r == nil:
+		return fmt.Errorf("%w: nil registry", ErrInvalidRegistration)
+	case name == "":
+		return fmt.Errorf("%w: empty name", ErrInvalidRegistration)
+	case modifier == nil:
+		return fmt.Errorf("%w: nil modifier for %q", ErrInvalidRegistration, name)
 	}
 
 	r.mu.Lock()
@@ -41,6 +60,8 @@ func (r *Registry) Register(name string, modifier Modifier) {
 
 	items[name] = modifier
 	r.items.Store(&items)
+
+	return nil
 }
 
 // Get returns a registered modifier.
@@ -59,36 +80,55 @@ func (r *Registry) Get(name string) (Modifier, bool) {
 	return m, ok
 }
 
-// RegisterModifier registers a modifier in the compatibility default registry.
-func RegisterModifier(name string, modifier Modifier) { DefaultRegistry().Register(name, modifier) }
+// Clone returns a new registry holding the modifiers of r. Registering into
+// either registry afterwards does not affect the other. Cloning a nil registry
+// returns an empty one.
+func (r *Registry) Clone() *Registry {
+	c := NewRegistry()
+	if r == nil {
+		return c
+	}
+	// Register never changes a published table, so the clone shares it until
+	// either side registers again.
+	c.items.Store(r.items.Load())
 
-// GetModifier looks up a modifier in the default registry.
-func GetModifier(name string) (Modifier, bool) { return DefaultRegistry().Get(name) }
+	return c
+}
 
-var defaultRegistry = buildDefaultRegistry()
+// builtins holds the built-in modifiers. Nothing registers into it after
+// initialization; DefaultRegistry hands out clones.
+var builtins = newBuiltins()
 
-// DefaultRegistry returns the built-in modifier registry.
-func DefaultRegistry() *Registry { return defaultRegistry }
+// DefaultRegistry returns a new registry holding the built-in modifiers. Each
+// call returns a separate registry owned by the caller, so registering into
+// it, for example with phone.Register, affects no other registry. The call
+// does not copy the table and is cheap.
+func DefaultRegistry() *Registry { return builtins.Clone() }
 
-func buildDefaultRegistry() *Registry {
+func newBuiltins() *Registry {
 	r := NewRegistry()
-	r.Register("trim", stringModifier(strings.TrimSpace))
-	r.Register("lowercase", stringModifier(strings.ToLower))
-	r.Register("uppercase", stringModifier(strings.ToUpper))
-	r.Register("nil_on_empty", NilOnEmpty)
-	r.Register("remove_bad_symbols", RemoveBadSymbols)
-	r.Register("remove_empty_elements", RemoveEmptyElements)
-	r.Register("collapse_spaces", CollapseSpaces)
-	r.Register("truncate", Truncate)
-	r.Register("digits_only", DigitsOnly)
-	r.Register("email", Email)
-	r.Register("nil_on_zero", NilOnZero)
-	r.Register("empty_on_nil", EmptyOnNil)
-	r.Register("dedupe", Dedupe)
-	r.Register("utc", UTC)
-	r.Register("truncate_time", TruncateTime)
-	r.Register("clamp", Clamp)
-	r.Register("url", URL)
+	for name, m := range map[string]Modifier{
+		"trim":                  stringModifier(strings.TrimSpace),
+		"lowercase":             stringModifier(strings.ToLower),
+		"uppercase":             stringModifier(strings.ToUpper),
+		"nil_on_empty":          NilOnEmpty,
+		"remove_bad_symbols":    RemoveBadSymbols,
+		"remove_empty_elements": RemoveEmptyElements,
+		"collapse_spaces":       CollapseSpaces,
+		"truncate":              Truncate,
+		"digits_only":           DigitsOnly,
+		"email":                 Email,
+		"nil_on_zero":           NilOnZero,
+		"empty_on_nil":          EmptyOnNil,
+		"dedupe":                Dedupe,
+		"utc":                   UTC,
+		"truncate_time":         TruncateTime,
+		"clamp":                 Clamp,
+		"url":                   URL,
+	} {
+		// Every name is set and every modifier non-nil, so Register cannot fail.
+		_ = r.Register(name, m)
+	}
 
 	return r
 }

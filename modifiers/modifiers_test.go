@@ -37,8 +37,8 @@ func TestBuiltins(t *testing.T) {
 		field reflect.Value
 	}{{"trim", must(r.Get("trim")), reflect.ValueOf(&v.A).Elem()}, {"nil", must(r.Get("nil_on_empty")), reflect.ValueOf(&v.B).Elem()}, {"bad", must(r.Get("remove_bad_symbols")), reflect.ValueOf(&v.C).Elem()}, {"controls", must(r.Get("remove_bad_symbols")), reflect.ValueOf(&v.D).Elem()}, {"slice", must(r.Get("remove_empty_elements")), reflect.ValueOf(&v.E).Elem()}, {"ptr-slice", must(r.Get("remove_empty_elements")), reflect.ValueOf(&v.F).Elem()}}
 	for _, c := range cases {
-		if out := c.fn(c.field, nil); out.Error != nil {
-			t.Fatal(out.Error)
+		if out := c.fn(c.field, nil); out.Err != nil {
+			t.Fatal(out.Err)
 		}
 	}
 
@@ -99,17 +99,15 @@ func TestRegistryRegister(t *testing.T) {
 	t.Parallel()
 
 	r := modifiers.NewRegistry()
-	r.Register("x", func(v reflect.Value, _ map[string]string) modifiers.ModifierResult {
-		return modifiers.ModifierResult{Value: v}
+	r.Register("x", func(v reflect.Value, _ map[string]string) modifiers.Result {
+		return modifiers.Result{Value: v}
 	})
 
 	if _, ok := r.Get("x"); !ok {
 		t.Fatal("not registered")
 	}
 
-	r.Register("", nil)
-
-	if _, ok := r.Get(""); ok {
+	if err := r.Register("", nil); err == nil {
 		t.Fatal("accepted invalid entry")
 	}
 }
@@ -122,11 +120,11 @@ func TestRegistryZeroValueAndReplacement(t *testing.T) {
 		t.Fatal("empty registry returned a modifier")
 	}
 
-	first := modifiers.Modifier(func(v reflect.Value, _ map[string]string) modifiers.ModifierResult {
-		return modifiers.ModifierResult{Value: reflect.ValueOf("first")}
+	first := modifiers.Modifier(func(v reflect.Value, _ map[string]string) modifiers.Result {
+		return modifiers.Result{Value: reflect.ValueOf("first")}
 	})
-	second := modifiers.Modifier(func(v reflect.Value, _ map[string]string) modifiers.ModifierResult {
-		return modifiers.ModifierResult{Value: reflect.ValueOf("second")}
+	second := modifiers.Modifier(func(v reflect.Value, _ map[string]string) modifiers.Result {
+		return modifiers.Result{Value: reflect.ValueOf("second")}
 	})
 
 	r.Register("x", first)
@@ -151,22 +149,22 @@ func TestModifierEdgeCases(t *testing.T) {
 	transform := func(s string) (string, bool) { return strings.ToUpper(s), true }
 
 	unchanged := reflect.ValueOf(" ")
-	if got := modifiers.ApplyStringModifier(unchanged, transform); got.Value.String() != " " {
+	if got := modifiers.ApplyString(unchanged, transform); got.Value.String() != " " {
 		t.Fatal(got)
 	}
 
 	ptrValue := "lower"
 	holder := &ptrValue
 	ptr := reflect.ValueOf(&holder).Elem()
-	modifiers.ApplyStringModifier(ptr, transform)
+	modifiers.ApplyString(ptr, transform)
 
 	if *holder != "LOWER" {
 		t.Fatal(ptrValue)
 	}
 
 	var nilPtr *string
-	modifiers.ApplyStringModifier(reflect.ValueOf(nilPtr), transform)
-	modifiers.ApplyStringModifier(reflect.ValueOf(3), transform)
+	modifiers.ApplyString(reflect.ValueOf(nilPtr), transform)
+	modifiers.ApplyString(reflect.ValueOf(3), transform)
 
 	s := "value"
 	modifiers.NilOnEmpty(reflect.ValueOf(&s).Elem(), nil)
@@ -190,7 +188,9 @@ func TestModifierEdgeCases(t *testing.T) {
 		t.Fatal("nil registry returned a modifier")
 	}
 
-	registry.Register("x", func(reflect.Value, map[string]string) modifiers.ModifierResult { return modifiers.ModifierResult{} })
+	if err := registry.Register("x", func(reflect.Value, map[string]string) modifiers.Result { return modifiers.Result{} }); err == nil {
+		t.Fatal("a nil registry accepted a registration")
+	}
 }
 
 func TestRemoveBadSymbolsPreservesLegacyUnicodeSet(t *testing.T) {
@@ -210,8 +210,8 @@ func TestRemoveBadSymbolsPreservesLegacyUnicodeSet(t *testing.T) {
 			input := "a" + string(r) + "b"
 
 			value := reflect.ValueOf(&input).Elem()
-			if result := remove(value, nil); result.Error != nil {
-				t.Fatal(result.Error)
+			if result := remove(value, nil); result.Err != nil {
+				t.Fatal(result.Err)
 			}
 
 			if input != "ab" {
@@ -223,8 +223,8 @@ func TestRemoveBadSymbolsPreservesLegacyUnicodeSet(t *testing.T) {
 	allBad := string([]rune{'\u0340', '\u0341'})
 
 	value := reflect.ValueOf(&allBad).Elem()
-	if result := remove(value, nil); result.Error != nil {
-		t.Fatal(result.Error)
+	if result := remove(value, nil); result.Err != nil {
+		t.Fatal(result.Err)
 	}
 
 	if allBad != string([]rune{'\u0340', '\u0341'}) {
@@ -241,8 +241,8 @@ func TestRegistryAndParserConcurrent(t *testing.T) {
 	for range 8 {
 		wg.Go(func() {
 			for range 100 {
-				r.Register("trim", func(v reflect.Value, _ map[string]string) modifiers.ModifierResult {
-					return modifiers.ModifierResult{Value: v}
+				r.Register("trim", func(v reflect.Value, _ map[string]string) modifiers.Result {
+					return modifiers.Result{Value: v}
 				})
 				_, _ = r.Get("trim")
 				p := modifiers.Parse("phone(region=US)")
@@ -271,7 +271,7 @@ func TestApplyStringModifierPreservesNamedStringTypes(t *testing.T) {
 			v = reflect.ValueOf(&value)
 		}
 
-		result := modifiers.ApplyStringModifier(v, func(s string) (string, bool) {
+		result := modifiers.ApplyString(v, func(s string) (string, bool) {
 			return strings.TrimSpace(s), true
 		})
 		if result.Value.Type() != v.Type() {
@@ -316,18 +316,18 @@ func TestModifiersIgnoreInvalidAndUnsupportedValues(t *testing.T) {
 	t.Parallel()
 
 	upper := func(s string) (string, bool) { return strings.ToUpper(s), s != strings.ToUpper(s) }
-	if got := modifiers.ApplyStringModifier(reflect.Value{}, upper); got.Value.IsValid() || got.Error != nil {
+	if got := modifiers.ApplyString(reflect.Value{}, upper); got.Value.IsValid() || got.Err != nil {
 		t.Fatalf("invalid value: %+v", got)
 	}
 
-	if got := modifiers.NilOnEmpty(reflect.Value{}, nil); got.Value.IsValid() || got.Error != nil {
+	if got := modifiers.NilOnEmpty(reflect.Value{}, nil); got.Value.IsValid() || got.Err != nil {
 		t.Fatalf("invalid value: %+v", got)
 	}
 
 	already := "UPPER"
 
 	v := reflect.ValueOf(&already)
-	if got := modifiers.ApplyStringModifier(v, upper); got.Value.Pointer() != v.Pointer() {
+	if got := modifiers.ApplyString(v, upper); got.Value.Pointer() != v.Pointer() {
 		t.Fatal("unchanged non-settable pointer was replaced")
 	}
 }
@@ -360,13 +360,13 @@ func TestParseParameters(t *testing.T) {
 
 	cases := []struct {
 		clause string
-		want   modifiers.ModifierParams
+		want   modifiers.Clause
 	}{
-		{clause: " trim ", want: modifiers.ModifierParams{Name: "trim"}},
-		{clause: "", want: modifiers.ModifierParams{}},
-		{clause: "(x=1)", want: modifiers.ModifierParams{Name: "(x=1)"}},
-		{clause: "phone(", want: modifiers.ModifierParams{Name: "phone("}},
-		{clause: "f(a = 1 ;; flag ; k=v=w)", want: modifiers.ModifierParams{Name: "f", Params: map[string]string{"a": "1", "flag": "", "k": "v=w"}}},
+		{clause: " trim ", want: modifiers.Clause{Name: "trim"}},
+		{clause: "", want: modifiers.Clause{}},
+		{clause: "(x=1)", want: modifiers.Clause{Name: "(x=1)"}},
+		{clause: "phone(", want: modifiers.Clause{Name: "phone("}},
+		{clause: "f(a = 1 ;; flag ; k=v=w)", want: modifiers.Clause{Name: "f", Params: map[string]string{"a": "1", "flag": "", "k": "v=w"}}},
 	}
 	for _, tc := range cases {
 		t.Run(tc.clause, func(t *testing.T) {

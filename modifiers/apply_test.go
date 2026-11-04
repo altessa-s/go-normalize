@@ -38,7 +38,7 @@ func TestApplyModifierSettableValues(t *testing.T) {
 	v.Pointer = &innerPtr
 	for _, field := range []string{"Plain", "Named", "Pointer", "Nil", "Other"} {
 		f := reflect.ValueOf(&v).Elem().FieldByName(field)
-		if out := modifiers.ApplyModifier(f, clampAge); out.Error != nil || out.Value.Type() != f.Type() {
+		if out := modifiers.Apply(f, clampAge); out.Err != nil || out.Value.Type() != f.Type() {
 			t.Fatalf("%s: %+v", field, out)
 		}
 	}
@@ -51,30 +51,30 @@ func TestApplyModifierSettableValues(t *testing.T) {
 func TestApplyModifierNonSettableValues(t *testing.T) {
 	t.Parallel()
 
-	out := modifiers.ApplyModifier(reflect.ValueOf(age(200)), clampAge)
+	out := modifiers.Apply(reflect.ValueOf(age(200)), clampAge)
 	if out.Value.Type() != reflect.TypeFor[age]() || out.Value.Int() != 150 {
 		t.Fatalf("value: %v", out.Value)
 	}
 
 	unchanged := reflect.ValueOf(age(20))
-	if out := modifiers.ApplyModifier(unchanged, clampAge); out.Value.Int() != 20 {
+	if out := modifiers.Apply(unchanged, clampAge); out.Value.Int() != 20 {
 		t.Fatalf("unchanged value: %v", out.Value)
 	}
 
 	n := age(200)
 	pointer := reflect.ValueOf(&n)
 
-	out = modifiers.ApplyModifier(pointer, clampAge)
+	out = modifiers.Apply(pointer, clampAge)
 	if out.Value.Pointer() == pointer.Pointer() || out.Value.Elem().Int() != 150 || n != 200 {
 		t.Fatalf("pointer: got %v, original %d", out.Value.Elem(), n)
 	}
 
 	small := age(20)
-	if out := modifiers.ApplyModifier(reflect.ValueOf(&small), clampAge); out.Value.Elem().Int() != 20 {
+	if out := modifiers.Apply(reflect.ValueOf(&small), clampAge); out.Value.Elem().Int() != 20 {
 		t.Fatalf("unchanged pointer: %v", out.Value.Elem())
 	}
 
-	if out := modifiers.ApplyModifier(reflect.Value{}, clampAge); out.Value.IsValid() {
+	if out := modifiers.Apply(reflect.Value{}, clampAge); out.Value.IsValid() {
 		t.Fatalf("invalid value: %v", out.Value)
 	}
 }
@@ -90,8 +90,8 @@ func TestApplyModifierMatchesNamedTypesExactly(t *testing.T) {
 		At    time.Time
 		Stamp stamp
 	}{At: local, Stamp: stamp(local)}
-	modifiers.ApplyModifier(reflect.ValueOf(&v.At).Elem(), toUTC)
-	modifiers.ApplyModifier(reflect.ValueOf(&v.Stamp).Elem(), toUTC)
+	modifiers.Apply(reflect.ValueOf(&v.At).Elem(), toUTC)
+	modifiers.Apply(reflect.ValueOf(&v.Stamp).Elem(), toUTC)
 
 	if v.At.Location() != time.UTC || !v.At.Equal(local) {
 		t.Fatalf("time.Time was not converted: %v", v.At)

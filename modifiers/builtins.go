@@ -13,36 +13,36 @@ import (
 )
 
 func stringModifier(fn func(string) string) Modifier {
-	return func(v reflect.Value, _ map[string]string) ModifierResult {
-		return ApplyStringModifier(v, func(s string) (string, bool) { n := fn(s); return n, n != s })
+	return func(v reflect.Value, _ map[string]string) Result {
+		return ApplyString(v, func(s string) (string, bool) { n := fn(s); return n, n != s })
 	}
 }
 
 // NilOnEmpty sets empty *string fields to nil. In a pointer chain the innermost
 // pointer is cleared.
-func NilOnEmpty(v reflect.Value, _ map[string]string) ModifierResult {
+func NilOnEmpty(v reflect.Value, _ map[string]string) Result {
 	return clearInnermost(v, func(x reflect.Value) bool { return x.Kind() == reflect.String && x.Len() == 0 })
 }
 
 // clearInnermost sets the innermost pointer of the chain v to nil when empty
 // reports the value it points to. A chain that cannot be set is copied first.
-func clearInnermost(v reflect.Value, empty func(reflect.Value) bool) ModifierResult {
+func clearInnermost(v reflect.Value, empty func(reflect.Value) bool) Result {
 	if !v.IsValid() || v.Kind() != reflect.Pointer {
-		return ModifierResult{Value: v}
+		return Result{Value: v}
 	}
 
 	if !v.CanSet() {
 		root, _, _, ok := copyChain(v, false)
 		if ok && clearPointer(root, empty) {
-			return ModifierResult{Value: root}
+			return Result{Value: root}
 		}
 
-		return ModifierResult{Value: v}
+		return Result{Value: v}
 	}
 
 	clearPointer(v, empty)
 
-	return ModifierResult{Value: v}
+	return Result{Value: v}
 }
 
 func clearPointer(p reflect.Value, empty func(reflect.Value) bool) bool {
@@ -60,14 +60,14 @@ func clearPointer(p reflect.Value, empty func(reflect.Value) bool) bool {
 }
 
 // RemoveEmptyElements removes blank strings and nil values from string slices.
-func RemoveEmptyElements(v reflect.Value, _ map[string]string) ModifierResult {
+func RemoveEmptyElements(v reflect.Value, _ map[string]string) Result {
 	if !v.IsValid() || v.Kind() != reflect.Slice || !v.CanSet() {
-		return ModifierResult{Value: v}
+		return Result{Value: v}
 	}
 
 	e := v.Type().Elem()
 	if e.Kind() != reflect.String && (e.Kind() != reflect.Pointer || e.Elem().Kind() != reflect.String) {
-		return ModifierResult{Value: v}
+		return Result{Value: v}
 	}
 
 	first := 0
@@ -76,7 +76,7 @@ func RemoveEmptyElements(v reflect.Value, _ map[string]string) ModifierResult {
 	}
 
 	if first == v.Len() {
-		return ModifierResult{Value: v}
+		return Result{Value: v}
 	}
 
 	n := reflect.MakeSlice(v.Type(), first, v.Len()-1)
@@ -91,7 +91,7 @@ func RemoveEmptyElements(v reflect.Value, _ map[string]string) ModifierResult {
 
 	v.Set(n)
 
-	return ModifierResult{Value: v}
+	return Result{Value: v}
 }
 
 func keepElement(v reflect.Value, pointer bool) bool {
@@ -103,8 +103,8 @@ func keepElement(v reflect.Value, pointer bool) bool {
 }
 
 // RemoveBadSymbols removes control and directional formatting characters.
-func RemoveBadSymbols(v reflect.Value, _ map[string]string) ModifierResult {
-	return ApplyStringModifier(v, func(s string) (string, bool) {
+func RemoveBadSymbols(v reflect.Value, _ map[string]string) Result {
+	return ApplyString(v, func(s string) (string, bool) {
 		n := strings.Map(func(r rune) rune {
 			if isBadSymbol(r) {
 				return -1
@@ -139,8 +139,8 @@ func isBadSymbol(r rune) bool {
 // CollapseSpaces replaces every run of white space, as defined by
 // unicode.IsSpace, with a single ASCII space. It does not trim; combine it with
 // trim for that. Bytes that are not valid UTF-8 are kept as they are.
-func CollapseSpaces(v reflect.Value, _ map[string]string) ModifierResult {
-	return ApplyStringModifier(v, collapseSpaces)
+func CollapseSpaces(v reflect.Value, _ map[string]string) Result {
+	return ApplyString(v, collapseSpaces)
 }
 
 func collapseSpaces(s string) (string, bool) {
@@ -192,7 +192,7 @@ func needsCollapse(s string) bool {
 // Truncate shortens strings to at most max runes, given as the max parameter,
 // and never cuts a multi-byte character. A missing, non-numeric or negative max
 // fails with ErrInvalidParameter.
-func Truncate(v reflect.Value, params map[string]string) ModifierResult {
+func Truncate(v reflect.Value, params map[string]string) Result {
 	raw, ok := params["max"]
 
 	limit, err := strconv.Atoi(raw)
@@ -200,7 +200,7 @@ func Truncate(v reflect.Value, params map[string]string) ModifierResult {
 		return invalidParameter(v, "max must be a non-negative integer, got %q", raw)
 	}
 
-	return ApplyStringModifier(v, func(s string) (string, bool) { return truncateRunes(s, limit) })
+	return ApplyString(v, func(s string) (string, bool) { return truncateRunes(s, limit) })
 }
 
 func truncateRunes(s string, limit int) (string, bool) {
@@ -221,8 +221,8 @@ func truncateRunes(s string, limit int) (string, bool) {
 }
 
 // DigitsOnly keeps the ASCII digits 0-9 and removes every other character.
-func DigitsOnly(v reflect.Value, _ map[string]string) ModifierResult {
-	return ApplyStringModifier(v, func(s string) (string, bool) {
+func DigitsOnly(v reflect.Value, _ map[string]string) Result {
+	return ApplyString(v, func(s string) (string, bool) {
 		n := strings.Map(func(r rune) rune {
 			if r >= '0' && r <= '9' {
 				return r
@@ -238,8 +238,8 @@ func DigitsOnly(v reflect.Value, _ map[string]string) ModifierResult {
 // Email trims an address and lower-cases its domain, the part after the last
 // '@'. The local part keeps its case, which RFC 5321 lets servers distinguish.
 // It does not validate the address; a value without '@' is only trimmed.
-func Email(v reflect.Value, _ map[string]string) ModifierResult {
-	return ApplyStringModifier(v, normalizeEmail)
+func Email(v reflect.Value, _ map[string]string) Result {
+	return ApplyString(v, normalizeEmail)
 }
 
 func normalizeEmail(s string) (string, bool) {
@@ -256,24 +256,24 @@ func normalizeEmail(s string) (string, bool) {
 // NilOnZero sets a pointer to nil when it points to the zero value of its type,
 // such as 0, false, "" or an empty struct. In a pointer chain the innermost
 // pointer is cleared. It generalizes nil_on_empty to every pointer type.
-func NilOnZero(v reflect.Value, _ map[string]string) ModifierResult {
+func NilOnZero(v reflect.Value, _ map[string]string) Result {
 	return clearInnermost(v, reflect.Value.IsZero)
 }
 
 // EmptyOnNil points nil pointers at new zero values, through the whole pointer
 // chain, so that a *string field always holds a string. It is the inverse of
 // nil_on_zero. A chain that cannot be set is copied, never written.
-func EmptyOnNil(v reflect.Value, _ map[string]string) ModifierResult {
+func EmptyOnNil(v reflect.Value, _ map[string]string) Result {
 	if !v.IsValid() || v.Kind() != reflect.Pointer {
-		return ModifierResult{Value: v}
+		return Result{Value: v}
 	}
 
 	if !v.CanSet() {
 		if root, _, filled, _ := copyChain(v, true); filled {
-			return ModifierResult{Value: root}
+			return Result{Value: root}
 		}
 
-		return ModifierResult{Value: v}
+		return Result{Value: v}
 	}
 
 	for p := v; p.Kind() == reflect.Pointer; p = p.Elem() {
@@ -282,16 +282,16 @@ func EmptyOnNil(v reflect.Value, _ map[string]string) ModifierResult {
 		}
 	}
 
-	return ModifierResult{Value: v}
+	return Result{Value: v}
 }
 
 // Dedupe removes repeated elements from slices of strings, numbers and
 // booleans, named types included, and keeps the first occurrence of each.
 // Other element types are left unchanged: pointers and interfaces would
 // compare by identity rather than by the values they refer to.
-func Dedupe(v reflect.Value, _ map[string]string) ModifierResult {
+func Dedupe(v reflect.Value, _ map[string]string) Result {
 	if !v.IsValid() || v.Kind() != reflect.Slice || !v.CanSet() || v.Len() < 2 {
-		return ModifierResult{Value: v}
+		return Result{Value: v}
 	}
 
 	switch kind := v.Type().Elem().Kind(); {
@@ -301,7 +301,7 @@ func Dedupe(v reflect.Value, _ map[string]string) ModifierResult {
 		dedupe(v, reflect.Value.Interface)
 	}
 
-	return ModifierResult{Value: v}
+	return Result{Value: v}
 }
 
 // dedupe replaces v with a copy without repeated keys. A slice without

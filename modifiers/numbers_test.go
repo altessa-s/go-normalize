@@ -47,8 +47,8 @@ func TestClamp(t *testing.T) {
 			v := reflect.New(reflect.TypeOf(tc.input)).Elem()
 			v.Set(reflect.ValueOf(tc.input))
 
-			if out := clamp(v, tc.params); out.Error != nil {
-				t.Fatal(out.Error)
+			if out := clamp(v, tc.params); out.Err != nil {
+				t.Fatal(out.Err)
 			}
 
 			if got := v.Interface(); got != tc.want {
@@ -70,8 +70,8 @@ func TestClampPointersAndNaN(t *testing.T) {
 		NaN     float64
 	}{Pointer: &n, NaN: math.NaN()}
 	for i := range reflect.TypeOf(v).NumField() {
-		if out := modifiers.Clamp(reflect.ValueOf(&v).Elem().Field(i), params); out.Error != nil {
-			t.Fatal(out.Error)
+		if out := modifiers.Clamp(reflect.ValueOf(&v).Elem().Field(i), params); out.Err != nil {
+			t.Fatal(out.Err)
 		}
 	}
 
@@ -111,8 +111,8 @@ func TestClampRejectsInvalidBounds(t *testing.T) {
 			v.Set(reflect.ValueOf(tc.input))
 
 			out := modifiers.Clamp(v, tc.params)
-			if !errors.Is(out.Error, modifiers.ErrInvalidParameter) {
-				t.Fatalf("got %v, want ErrInvalidParameter", out.Error)
+			if !errors.Is(out.Err, modifiers.ErrInvalidParameter) {
+				t.Fatalf("got %v, want ErrInvalidParameter", out.Err)
 			}
 
 			if v.Interface() != tc.input {

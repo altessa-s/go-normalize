@@ -6,14 +6,14 @@ package modifiers
 
 import "reflect"
 
-// ApplyStringModifier transforms string and pointer-to-string values, named
+// ApplyString transforms string and pointer-to-string values, named
 // string types included. fn reports whether it changed the string.
 //
-// It follows the same rules as ApplyModifier, written out for strings because
+// It follows the same rules as Apply, written out for strings because
 // every built-in string modifier runs through it.
-func ApplyStringModifier(v reflect.Value, fn func(string) (string, bool)) ModifierResult {
+func ApplyString(v reflect.Value, fn func(string) (string, bool)) Result {
 	if !v.IsValid() {
-		return ModifierResult{}
+		return Result{}
 	}
 
 	if v.Kind() == reflect.Pointer && !v.CanSet() {
@@ -30,7 +30,7 @@ func ApplyStringModifier(v reflect.Value, fn func(string) (string, bool)) Modifi
 	leaf := v
 	for leaf.Kind() == reflect.Pointer {
 		if leaf.IsNil() {
-			return ModifierResult{Value: v}
+			return Result{Value: v}
 		}
 
 		leaf = leaf.Elem()
@@ -45,25 +45,25 @@ func ApplyStringModifier(v reflect.Value, fn func(string) (string, bool)) Modifi
 				x := reflect.New(leaf.Type()).Elem()
 				x.SetString(n)
 
-				return ModifierResult{Value: x}
+				return Result{Value: x}
 			}
 		}
 
-		return ModifierResult{Value: v}
+		return Result{Value: v}
 	}
 
-	return ModifierResult{Value: v}
+	return Result{Value: v}
 }
 
-// ApplyModifier transforms values of type T and pointers to them. A predeclared
+// Apply transforms values of type T and pointers to them. A predeclared
 // T such as int, float64 or string also matches named types of the same kind,
-// so ApplyModifier[int] handles type Age int; any other T must match exactly.
+// so Apply[int] handles type Age int; any other T must match exactly.
 // fn reports whether it changed the value.
 //
 // Settable values are updated in place. A value that cannot be set, or a
 // pointer that cannot be set itself, yields a new value in the result and the
 // original memory is left to its owner.
-func ApplyModifier[T any](v reflect.Value, fn func(T) (T, bool)) ModifierResult {
+func Apply[T any](v reflect.Value, fn func(T) (T, bool)) Result {
 	target := reflect.TypeFor[T]()
 	accept := func(t reflect.Type) bool { return matches(t, target) }
 
@@ -84,9 +84,9 @@ func ApplyModifier[T any](v reflect.Value, fn func(T) (T, bool)) ModifierResult 
 // accept admits that value's type, lets update read it from src and write a
 // changed value to dst. Settable values are updated in place; otherwise the
 // result carries a new value and the original memory is left to its owner.
-func applyToLeaf(v reflect.Value, accept func(reflect.Type) bool, update func(src, dst reflect.Value) bool) ModifierResult {
+func applyToLeaf(v reflect.Value, accept func(reflect.Type) bool, update func(src, dst reflect.Value) bool) Result {
 	if !v.IsValid() {
-		return ModifierResult{}
+		return Result{}
 	}
 
 	if v.Kind() == reflect.Pointer && !v.CanSet() {
@@ -96,39 +96,39 @@ func applyToLeaf(v reflect.Value, accept func(reflect.Type) bool, update func(sr
 	leaf := v
 	for leaf.Kind() == reflect.Pointer {
 		if leaf.IsNil() {
-			return ModifierResult{Value: v}
+			return Result{Value: v}
 		}
 
 		leaf = leaf.Elem()
 	}
 
 	if !accept(leaf.Type()) {
-		return ModifierResult{Value: v}
+		return Result{Value: v}
 	}
 
 	if leaf.CanSet() {
 		update(leaf, leaf)
-		return ModifierResult{Value: v}
+		return Result{Value: v}
 	}
 
 	x := reflect.New(leaf.Type()).Elem()
 	if update(leaf, x) {
-		return ModifierResult{Value: x}
+		return Result{Value: x}
 	}
 
-	return ModifierResult{Value: v}
+	return Result{Value: v}
 }
 
 // replaceChain applies update to a copy of the pointer chain v, which cannot be
 // set, and returns the copy when the value changed. The memory v points to
 // belongs to the caller and is never written.
-func replaceChain(v reflect.Value, accept func(reflect.Type) bool, update func(src, dst reflect.Value) bool) ModifierResult {
+func replaceChain(v reflect.Value, accept func(reflect.Type) bool, update func(src, dst reflect.Value) bool) Result {
 	root, leaf, _, ok := copyChain(v, false)
 	if !ok || !accept(leaf.Type()) || !update(leaf, leaf) {
-		return ModifierResult{Value: v}
+		return Result{Value: v}
 	}
 
-	return ModifierResult{Value: root}
+	return Result{Value: root}
 }
 
 // copyChain copies the pointer chain v and the value at its end into new

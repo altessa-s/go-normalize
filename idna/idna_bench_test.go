@@ -27,8 +27,8 @@ func BenchmarkToASCII(b *testing.B) {
 			for b.Loop() {
 				s = tc.input
 
-				if out := idna.ToASCII(v, nil); out.Error != nil {
-					b.Fatal(out.Error)
+				if out := idna.ToASCII(v, nil); out.Err != nil {
+					b.Fatal(out.Err)
 				}
 			}
 		})

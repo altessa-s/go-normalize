@@ -34,8 +34,8 @@ func BenchmarkModifiers(b *testing.B) {
 			v := reflect.ValueOf(&s).Elem()
 			for b.Loop() {
 				s = tc.input
-				if out := tc.fn(v, tc.params); out.Error != nil {
-					b.Fatal(out.Error)
+				if out := tc.fn(v, tc.params); out.Err != nil {
+					b.Fatal(out.Err)
 				}
 			}
 		})

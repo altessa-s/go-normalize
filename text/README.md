@@ -10,8 +10,10 @@ requirements.
 ## Usage
 
 ```go
-registry := modifiers.NewRegistry()
-text.Register(registry)
+registry := modifiers.DefaultRegistry()
+if err := text.Register(registry); err != nil {
+	return err
+}
 
 type Account struct {
 	Login string `normalize:"trim,nfkc,fold"`
@@ -35,7 +37,6 @@ looks.
 
 ## Key types
 
-| Identifier  | Description                                                     |
-|-------------|-----------------------------------------------------------------|
-| `Register`  | Adds `nfc`, `nfkc`, `fold` and `title` to a `Registrar`         |
-| `Registrar` | `Register(name, modifier)`; `*modifiers.Registry` implements it |
+| Identifier | Description                                                       |
+|------------|-------------------------------------------------------------------|
+| `Register` | Adds `nfc`, `nfkc`, `fold` and `title` to a `modifiers.Registrar` |

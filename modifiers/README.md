@@ -34,28 +34,33 @@ non-positive `unit` for `truncate_time` and `clamp` bounds that are absent, not 
 
 ## Key types
 
-| Identifier            | Description                                                                                         |
-|-----------------------|-----------------------------------------------------------------------------------------------------|
-| `Modifier`            | `func(reflect.Value, map[string]string) ModifierResult`                                             |
-| `ModifierResult`      | The value to store and an optional `*ModifierError`                                                 |
-| `ModifierError`       | Field name, path, modifier name and cause; unwraps to the cause                                     |
-| `ErrInvalidParameter` | Cause of a `ModifierError` for a tag parameter the modifier cannot use                             |
-| `Registry`            | Name-to-modifier table; lookups take no lock, `Register` copies the table; the zero value is empty |
-| `DefaultRegistry`     | The registry holding the built-ins, used by `normalize.Normalize`                                   |
-| `Parse`               | Splits a clause such as `phone(region=US; strict)` into a name and a fresh parameter map            |
-| `ApplyStringModifier` | Runs a string transform on `string` and pointer-to-`string` values                                  |
-| `ApplyModifier[T]`   | Runs a transform on `T` and pointers to it; predeclared `T` also matches named types of its kind    |
+| Identifier            | Description                                                                                          |
+|-----------------------|------------------------------------------------------------------------------------------------------|
+| `Modifier`            | `func(v reflect.Value, params map[string]string) Result`                                             |
+| `Result`              | The value to store, or the zero `Value` to leave the field as it is, and an optional `Err`           |
+| `Error`               | A modifier failure with the modifier name, field name and path; unwraps to the modifier's error      |
+| `ErrInvalidParameter` | Cause of an `Error` for a tag parameter the modifier cannot use                                      |
+| `Clause`              | A parsed tag clause: modifier name and parameters                                                    |
+| `Parse`               | Splits a clause such as `phone(region=US; strict)` into a `Clause` with a fresh parameter map        |
+| `Registry`            | Name-to-modifier table; lookups take no lock, `Register` copies the table; the zero value is empty   |
+| `Registrar`           | `Register(name, modifier) error`; `*Registry` implements it, the optional modules register into one  |
+| `DefaultRegistry`     | Returns a new, caller-owned registry holding the built-ins; no call affects another                  |
+| `Registry.Clone`      | Returns an independent copy of a registry                                                            |
+| `ErrInvalidRegistration` | `Register` was called on a nil registry, with an empty name or with a nil modifier                |
+| `ApplyString`         | Runs a string transform on `string` and pointer-to-`string` values                                   |
+| `Apply[T]`            | Runs a transform on `T` and pointers to it; predeclared `T` also matches named types of its kind     |
 
 ## Usage
 
 ```go
-registry := modifiers.NewRegistry()
-registry.Register("slug", func(v reflect.Value, params map[string]string) modifiers.ModifierResult {
-	return modifiers.ApplyStringModifier(v, func(s string) (string, bool) {
+registry := modifiers.DefaultRegistry()
+err := registry.Register("slug", func(v reflect.Value, params map[string]string) modifiers.Result {
+	return modifiers.ApplyString(v, func(s string) (string, bool) {
 		out := strings.Join(strings.Fields(s), params["sep"])
 		return out, out != s
 	})
 })
 ```
 
-Register modifiers during setup: each `Register` call copies the table so that lookups never block.
+Register modifiers during setup: each `Register` call copies the table so that lookups never block. Start from `NewRegistry` instead
+of `DefaultRegistry` to resolve only the modifiers you register.

@@ -5,8 +5,8 @@
 package phone
 
 import (
-	"cmp"
 	"errors"
+	"fmt"
 	"reflect"
 	"strings"
 
@@ -15,69 +15,98 @@ import (
 	"github.com/altessa-s/go-normalize/modifiers"
 )
 
-// ErrInvalidPhone identifies an invalid phone number.
-var ErrInvalidPhone = errors.New("phone number is invalid")
+// ErrInvalidPhone identifies a phone number that does not parse or is not
+// valid. Errors do not include the number.
+var ErrInvalidPhone = errors.New("phone: invalid phone number")
 
-// defaultRegion applies when the tag names no region.
-const defaultRegion = "RU"
+// ErrUnsupportedRegion identifies a region that is not an ISO 3166-1 alpha-2
+// code with phone number metadata.
+var ErrUnsupportedRegion = errors.New("phone: unsupported region")
 
 // separators are the formatting characters removed before parsing.
 var separators = strings.NewReplacer(" ", "", "-", "", "(", "", ")", "", ".", "", "_", "")
 
-// Registrar accepts modifier registrations. *modifiers.Registry implements it.
-type Registrar interface {
-	Register(name string, modifier modifiers.Modifier)
-}
-
-// Register adds the phone modifier to registry. Registration is explicit and has no package side effect.
-// A nil registry is ignored.
-func Register(registry Registrar) {
+// Register adds the phone modifier to registry. defaultRegion is the ISO
+// 3166-1 alpha-2 region, in any case, used for numbers written without a
+// country code when the tag names no region; there is no implicit default.
+// Registration is explicit and has no package side effect. A nil registry
+// fails with modifiers.ErrInvalidRegistration and an unknown region with
+// ErrUnsupportedRegion.
+func Register(registry modifiers.Registrar, defaultRegion string) error {
 	if registry == nil {
-		return
+		return fmt.Errorf("%w: nil registry", modifiers.ErrInvalidRegistration)
 	}
 
-	registry.Register("phone", NormalizePhone)
+	m, err := New(defaultRegion)
+	if err != nil {
+		return err
+	}
+
+	return registry.Register("phone", m)
 }
 
-// NormalizePhone converts a valid phone number to E.164 form. Region defaults to RU.
-func NormalizePhone(v reflect.Value, params map[string]string) modifiers.ModifierResult {
-	if !v.IsValid() {
-		return modifiers.ModifierResult{Value: v}
+// New returns the phone modifier with defaultRegion, as Register describes.
+// The modifier formats valid numbers in E.164. It applies to string values
+// and pointer chains ending in one, named types included; empty strings are
+// left unchanged. The tag parameter region overrides defaultRegion; a region
+// without phone number metadata fails with modifiers.ErrInvalidParameter.
+// A number that does not parse or is not valid fails with ErrInvalidPhone.
+func New(defaultRegion string) (modifiers.Modifier, error) {
+	fallback, ok := canonicalRegion(defaultRegion)
+	if !ok {
+		return nil, fmt.Errorf("%w: default region %q", ErrUnsupportedRegion, defaultRegion)
 	}
 
-	var s string
-
-	ptr := false
-
-	switch v.Kind() {
-	case reflect.String:
-		s = v.String()
-	case reflect.Pointer:
-		if v.IsNil() || v.Type().Elem().Kind() != reflect.String {
-			return modifiers.ModifierResult{Value: v}
+	return func(v reflect.Value, params map[string]string) modifiers.Result {
+		region := fallback
+		if raw, ok := params["region"]; ok {
+			if region, ok = canonicalRegion(raw); !ok {
+				return modifiers.Result{Value: v, Err: fmt.Errorf("%w: %w %q", modifiers.ErrInvalidParameter, ErrUnsupportedRegion, raw)}
+			}
 		}
 
-		s = v.Elem().String()
-		ptr = true
-	default:
-		return modifiers.ModifierResult{Value: v}
+		return normalizeValue(v, region)
+	}, nil
+}
+
+// canonicalRegion returns region in upper case and reports whether phone
+// number metadata exists for it.
+func canonicalRegion(region string) (string, bool) {
+	region = strings.ToUpper(strings.TrimSpace(region))
+	return region, phonenumbers.GetSupportedRegions()[region]
+}
+
+func normalizeValue(v reflect.Value, region string) modifiers.Result {
+	failed := false
+	out := modifiers.ApplyString(v, func(s string) (string, bool) {
+		if s == "" {
+			return s, false
+		}
+
+		n, ok := format(s, region)
+		if !ok {
+			failed = true
+			return s, false
+		}
+
+		return n, n != s
+	})
+
+	if failed {
+		return modifiers.Result{Value: v, Err: ErrInvalidPhone}
 	}
 
-	if s == "" {
-		return modifiers.ModifierResult{Value: v}
-	}
+	return out
+}
 
-	region := cmp.Or(strings.ToUpper(params["region"]), defaultRegion)
+// format returns s in E.164 and reports whether s is a valid number.
+func format(s, region string) (string, bool) {
 	key := cacheKey{region: region, number: s}
 
 	cacheable := len(region)+len(s) <= maxPhoneCacheKeyLength
 	if cacheable {
 		if got, ok := phoneCache.get(key); ok {
-			if got.err {
-				return fail(v)
-			}
-
-			return set(v, got.value, ptr)
+			return got.value, !got.err
 		}
 	}
 
@@ -87,7 +116,7 @@ func NormalizePhone(v reflect.Value, params map[string]string) modifiers.Modifie
 			phoneCache.put(key, cacheEntry{err: true})
 		}
 
-		return fail(v)
+		return "", false
 	}
 
 	out := phonenumbers.Format(n, phonenumbers.E164)
@@ -95,36 +124,5 @@ func NormalizePhone(v reflect.Value, params map[string]string) modifiers.Modifie
 		phoneCache.put(key, cacheEntry{value: out})
 	}
 
-	return set(v, out, ptr)
-}
-
-func fail(v reflect.Value) modifiers.ModifierResult {
-	return modifiers.ModifierResult{Value: v, Error: &modifiers.ModifierError{ModifierName: "phone", Cause: ErrInvalidPhone}}
-}
-func set(v reflect.Value, s string, ptr bool) modifiers.ModifierResult {
-	if ptr {
-		x := reflect.New(v.Type().Elem())
-		x.Elem().SetString(s)
-
-		if v.CanSet() {
-			v.Set(x)
-			return modifiers.ModifierResult{Value: v}
-		}
-
-		return modifiers.ModifierResult{Value: x}
-	}
-
-	if s == v.String() {
-		return modifiers.ModifierResult{Value: v}
-	}
-
-	if v.CanSet() {
-		v.SetString(s)
-		return modifiers.ModifierResult{Value: v}
-	}
-
-	x := reflect.New(v.Type()).Elem()
-	x.SetString(s)
-
-	return modifiers.ModifierResult{Value: x}
+	return out, true
 }

@@ -8,6 +8,8 @@ import (
 	"fmt"
 	"maps"
 	"reflect"
+
+	"github.com/altessa-s/go-normalize/modifiers"
 )
 
 // walker holds the state of one Normalize call.
@@ -223,19 +225,12 @@ func (w *walker) apply(f *fieldPlan, fv reflect.Value) error {
 		}
 		// Modifiers may keep or change their parameters; the plan's copy stays intact.
 		out := m(fv, maps.Clone(clause.Params))
-		if out.Error != nil {
-			// Modifier errors belong to the modifier. Copy before adding field context
-			// so a modifier can safely reuse a sentinel error across calls.
-			modifierErr := *out.Error
-			if modifierErr.ModifierName == "" {
-				modifierErr.ModifierName = clause.Name
-			}
-
-			modifierErr.FieldName = f.name
+		if out.Err != nil {
+			modifierErr := &modifiers.Error{Modifier: clause.Name, Field: f.name, Err: out.Err}
 
 			return failAt(func(path string) error {
-				modifierErr.FieldPath = path
-				return &modifierErr
+				modifierErr.Path = path
+				return modifierErr
 			})
 		}
 

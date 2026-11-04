@@ -10,8 +10,10 @@ tags. It is a separate module so that `golang.org/x/net` stays out of the root m
 ## Usage
 
 ```go
-registry := modifiers.NewRegistry()
-idna.Register(registry)
+registry := modifiers.DefaultRegistry()
+if err := idna.Register(registry); err != nil {
+	return err
+}
 
 type Contact struct {
 	Email   string `normalize:"trim,email,idna"`
@@ -28,7 +30,6 @@ literals, ports, paths, queries and fragments are kept. Combine it with the buil
 
 | Identifier         | Description                                                                                           |
 |--------------------|-------------------------------------------------------------------------------------------------------|
-| `Register`         | Adds the `idna` modifier to a `Registrar`                                                             |
-| `Registrar`        | `Register(name, modifier)`; `*modifiers.Registry` implements it                                       |
+| `Register`         | Adds the `idna` modifier to a `modifiers.Registrar`                                                   |
 | `ToASCII`          | The modifier; applies to `string` values and pointers to them                                         |
-| `ErrInvalidDomain` | Cause of the `*modifiers.ModifierError` for a domain that is not a valid IDN; the value is not echoed |
+| `ErrInvalidDomain` | Cause of the `*modifiers.Error` for a domain that is not a valid IDN; the value is not echoed |

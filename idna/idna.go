@@ -6,6 +6,7 @@ package idna
 
 import (
 	"errors"
+	"fmt"
 	"net/url"
 	"reflect"
 	"strings"
@@ -19,19 +20,15 @@ import (
 // domain name. Errors do not include the value.
 var ErrInvalidDomain = errors.New("domain is invalid")
 
-// Registrar accepts modifier registrations. *modifiers.Registry implements it.
-type Registrar interface {
-	Register(name string, modifier modifiers.Modifier)
-}
-
 // Register adds the idna modifier to registry. Registration is explicit and
-// has no package side effect. A nil registry is ignored.
-func Register(registry Registrar) {
+// has no package side effect. A nil registry fails with
+// modifiers.ErrInvalidRegistration.
+func Register(registry modifiers.Registrar) error {
 	if registry == nil {
-		return
+		return fmt.Errorf("%w: nil registry", modifiers.ErrInvalidRegistration)
 	}
 
-	registry.Register("idna", ToASCII)
+	return registry.Register("idna", ToASCII)
 }
 
 // ToASCII converts internationalized domain names to the ASCII form that DNS
@@ -40,10 +37,10 @@ func Register(registry Registrar) {
 // bare domain, the domain after the last '@' of an email address and the
 // host of an absolute URL; IP literals are left as they are. Empty values are
 // left unchanged; an invalid domain fails with ErrInvalidDomain.
-func ToASCII(v reflect.Value, _ map[string]string) modifiers.ModifierResult {
+func ToASCII(v reflect.Value, _ map[string]string) modifiers.Result {
 	failed := false
 
-	out := modifiers.ApplyStringModifier(v, func(s string) (string, bool) {
+	out := modifiers.ApplyString(v, func(s string) (string, bool) {
 		n, err := convert(s)
 		if err != nil {
 			failed = true
@@ -53,7 +50,7 @@ func ToASCII(v reflect.Value, _ map[string]string) modifiers.ModifierResult {
 		return n, n != s
 	})
 	if failed {
-		return modifiers.ModifierResult{Value: v, Error: &modifiers.ModifierError{ModifierName: "idna", Cause: ErrInvalidDomain}}
+		return modifiers.Result{Value: v, Err: ErrInvalidDomain}
 	}
 
 	return out

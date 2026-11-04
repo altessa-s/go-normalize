@@ -14,10 +14,15 @@
 //
 // # Registry
 //
-// Registry lookups take no lock; Register publishes a new copy of the table,
-// so modifiers are meant to be registered during setup.
+// DefaultRegistry returns a new registry holding the built-ins; every call
+// returns a separate registry, so there is no process-wide state to change.
+// NewRegistry returns an empty one and Clone copies any registry. Registry
+// lookups take no lock; Register publishes a new copy of the table, so
+// modifiers are meant to be registered during setup.
 //
-//	registry := modifiers.NewRegistry()
-//	registry.Register("slug", slug)
+//	registry := modifiers.DefaultRegistry()
+//	if err := registry.Register("slug", slug); err != nil {
+//		return err
+//	}
 //	err := normalize.NormalizeWithRegistry(&value, registry)
 package modifiers

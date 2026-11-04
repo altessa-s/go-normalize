@@ -181,10 +181,10 @@ func TestIntegrationCustomRegistryComposesBuiltins(t *testing.T) {
 		r.Register(name, m)
 	}
 
-	r.Register("slug", func(v reflect.Value, params map[string]string) modifiers.ModifierResult {
+	r.Register("slug", func(v reflect.Value, params map[string]string) modifiers.Result {
 		sep := params["sep"]
 
-		return modifiers.ApplyStringModifier(v, func(s string) (string, bool) {
+		return modifiers.ApplyString(v, func(s string) (string, bool) {
 			out := strings.Join(strings.Fields(s), sep)
 			return out, out != s
 		})
@@ -211,12 +211,12 @@ func TestIntegrationErrorsCarryFieldContext(t *testing.T) {
 	t.Parallel()
 
 	r := modifiers.NewRegistry()
-	r.Register("positive", func(v reflect.Value, _ map[string]string) modifiers.ModifierResult {
+	r.Register("positive", func(v reflect.Value, _ map[string]string) modifiers.Result {
 		if v.Int() <= 0 {
-			return modifiers.ModifierResult{Error: &modifiers.ModifierError{Cause: strconv.ErrRange}}
+			return modifiers.Result{Err: strconv.ErrRange}
 		}
 
-		return modifiers.ModifierResult{Value: v}
+		return modifiers.Result{Value: v}
 	})
 
 	type line struct {
@@ -230,8 +230,8 @@ func TestIntegrationErrorsCarryFieldContext(t *testing.T) {
 		t.Fatalf("cause lost: %v", err)
 	}
 
-	modifierErr, ok := errors.AsType[*modifiers.ModifierError](err)
-	if !ok || modifierErr.FieldPath != "Lines.{key}[1].Quantity" || modifierErr.ModifierName != "positive" {
+	modifierErr, ok := errors.AsType[*modifiers.Error](err)
+	if !ok || modifierErr.Path != "Lines.{key}[1].Quantity" || modifierErr.Modifier != "positive" {
 		t.Fatalf("unexpected context: %v", err)
 	}
 
@@ -298,7 +298,7 @@ func TestIntegrationInvalidModifierParameter(t *testing.T) {
 		t.Fatalf("got %v, want ErrInvalidParameter", err)
 	}
 
-	if modifierErr, ok := errors.AsType[*modifiers.ModifierError](err); !ok || modifierErr.FieldPath != "Title" || modifierErr.ModifierName != "truncate" {
+	if modifierErr, ok := errors.AsType[*modifiers.Error](err); !ok || modifierErr.Path != "Title" || modifierErr.Modifier != "truncate" {
 		t.Fatalf("unexpected context: %v", err)
 	}
 }
@@ -309,8 +309,8 @@ func TestIntegrationApplyModifierOnNumbers(t *testing.T) {
 	type percent int
 
 	r := modifiers.NewRegistry()
-	r.Register("percent", func(v reflect.Value, _ map[string]string) modifiers.ModifierResult {
-		return modifiers.ApplyModifier(v, func(n int) (int, bool) {
+	r.Register("percent", func(v reflect.Value, _ map[string]string) modifiers.Result {
+		return modifiers.Apply(v, func(n int) (int, bool) {
 			c := min(max(n, 0), 100)
 			return c, c != n
 		})
@@ -412,7 +412,7 @@ func TestIntegrationClampBoundOutsideFieldType(t *testing.T) {
 		t.Fatalf("got %v, want ErrInvalidParameter", err)
 	}
 
-	if modifierErr, ok := errors.AsType[*modifiers.ModifierError](err); !ok || modifierErr.FieldPath != "Workers[0].Weight" {
+	if modifierErr, ok := errors.AsType[*modifiers.Error](err); !ok || modifierErr.Path != "Workers[0].Weight" {
 		t.Fatalf("unexpected context: %v", err)
 	}
 }

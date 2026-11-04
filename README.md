@@ -46,20 +46,21 @@ field and `custom` leaves it to the parent's `CustomNormalizer`.
 | `ErrModifierNotFound`   | A tag names a modifier the source does not resolve                                                |
 | `ErrNonReflexiveMapKey` | A map value changed under a key that cannot address it again, such as NaN                         |
 
-Modifier failures are returned as `*modifiers.ModifierError` with the field name and path; map keys appear as `{key}` so their contents never
+Modifier failures are returned as `*modifiers.Error` with the field name and path; map keys appear as `{key}` so their contents never
 reach error messages.
 
 ## Composing registries
 
-`phone.Register` adds the `phone` modifier to a registry. To use it with built-ins, copy the ones you need from `modifiers.DefaultRegistry()`:
+`modifiers.DefaultRegistry()` returns a new registry holding the built-ins; each call returns a separate registry owned by the caller, so
+registering into it changes nothing else. Add the optional modules to it:
 
 ```go
-registry := modifiers.NewRegistry()
-for _, name := range []string{"trim", "nil_on_empty"} {
-	if m, ok := modifiers.DefaultRegistry().Get(name); ok {
-		registry.Register(name, m)
-	}
+registry := modifiers.DefaultRegistry()
+if err := text.Register(registry); err != nil {
+	return err
 }
-phone.Register(registry)
 err := normalize.NormalizeWithRegistry(&contact, registry)
 ```
+
+Start from `modifiers.NewRegistry()` to resolve only the modifiers you register, and use `Registry.Clone` to derive registries from one
+another.

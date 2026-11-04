@@ -11,8 +11,8 @@ import (
 )
 
 // UTC converts time.Time values to UTC; the instant is unchanged.
-func UTC(v reflect.Value, _ map[string]string) ModifierResult {
-	return ApplyModifier(v, func(t time.Time) (time.Time, bool) {
+func UTC(v reflect.Value, _ map[string]string) Result {
+	return Apply(v, func(t time.Time) (time.Time, bool) {
 		return t.UTC(), t.Location() != time.UTC
 	})
 }
@@ -22,7 +22,7 @@ func UTC(v reflect.Value, _ map[string]string) ModifierResult {
 // means one of it. Rounding counts from the zero time, as time.Time.Truncate
 // does. Use it to match the precision of a store, such as microseconds for
 // PostgreSQL. A missing or non-positive unit fails with ErrInvalidParameter.
-func TruncateTime(v reflect.Value, params map[string]string) ModifierResult {
+func TruncateTime(v reflect.Value, params map[string]string) Result {
 	raw := params["unit"]
 
 	unit, err := parseUnit(raw)
@@ -30,7 +30,7 @@ func TruncateTime(v reflect.Value, params map[string]string) ModifierResult {
 		return invalidParameter(v, "unit must be a positive duration such as 1s or ms, got %q", raw)
 	}
 
-	return ApplyModifier(v, func(t time.Time) (time.Time, bool) {
+	return Apply(v, func(t time.Time) (time.Time, bool) {
 		r := t.Truncate(unit)
 		return r, !r.Equal(t)
 	})

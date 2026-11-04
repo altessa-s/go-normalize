@@ -11,15 +11,33 @@ import (
 	"github.com/altessa-s/go-normalize/phone"
 )
 
-func FuzzNormalizePhone(f *testing.F) {
+func FuzzPhone(f *testing.F) {
+	m, err := phone.New("RU")
+	if err != nil {
+		f.Fatal(err)
+	}
+
 	f.Add("2025550123", "US")
 	f.Add("", "RU")
+	f.Add("+7 916 123-45-67", "")
 	f.Fuzz(func(t *testing.T, s, region string) {
 		v := reflect.ValueOf(s)
 
-		result := phone.NormalizePhone(v, map[string]string{"region": region})
-		if result.Value.IsValid() && result.Value.Kind() != reflect.String {
+		result := m(v, map[string]string{"region": region})
+		if result.Value.Kind() != reflect.String {
 			t.Fatalf("unexpected kind %s", result.Value.Kind())
+		}
+
+		if result.Err != nil {
+			if result.Value.String() != s {
+				t.Fatalf("a failure changed the value: %v", result.Err)
+			}
+
+			return
+		}
+
+		if out := result.Value.String(); out != "" && out[0] != '+' {
+			t.Fatalf("result %q is not in E.164", out)
 		}
 	})
 }

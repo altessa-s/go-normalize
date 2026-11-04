@@ -27,8 +27,14 @@ var ErrNonReflexiveMapKey = errors.New("normalize: cannot update map value with 
 // CustomNormalizer can provide additional normalization after tagged fields.
 type CustomNormalizer interface{ Normalize() error }
 
-// Normalize applies built-in modifiers to fields tagged with normalize.
-func Normalize(value any) error { return NormalizeWithRegistry(value, modifiers.DefaultRegistry()) }
+// builtins is the registry Normalize resolves modifiers in. It is a private
+// clone of the built-ins that nothing registers into.
+var builtins = modifiers.DefaultRegistry()
+
+// Normalize applies the built-in modifiers to the fields of the struct value
+// points to, as declared by their normalize tags. Use NormalizeWithRegistry
+// for modifiers outside the built-ins.
+func Normalize(value any) error { return NormalizeWithRegistry(value, builtins) }
 
 // ModifierSource resolves the modifier names used in normalize tags.
 // *modifiers.Registry implements it.
@@ -36,19 +42,20 @@ type ModifierSource interface {
 	Get(name string) (modifiers.Modifier, bool)
 }
 
-// NormalizeWithRegistry applies modifiers from registry; it allows optional adapters such as phone.
-// A nil registry resolves no modifiers.
-func NormalizeWithRegistry(value any, registry ModifierSource) error {
+// NormalizeWithRegistry is Normalize with the modifiers that source resolves,
+// typically a *modifiers.Registry built from modifiers.DefaultRegistry and the
+// optional modules. A nil source resolves no modifiers.
+func NormalizeWithRegistry(value any, source ModifierSource) error {
 	v := reflect.ValueOf(value)
 	if v.Kind() != reflect.Pointer || v.IsNil() || v.Elem().Kind() != reflect.Struct {
 		return ErrInvalidInput
 	}
 
-	if registry == nil {
-		registry = (*modifiers.Registry)(nil)
+	if source == nil {
+		source = (*modifiers.Registry)(nil)
 	}
 
-	w := walker{source: registry}
+	w := walker{source: source}
 
 	return resolvePath(w.walk(v.Elem()))
 }

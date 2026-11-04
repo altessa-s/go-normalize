@@ -39,8 +39,8 @@ func TestToASCII(t *testing.T) {
 			t.Parallel()
 
 			s := tc.input
-			if out := idna.ToASCII(reflect.ValueOf(&s).Elem(), nil); out.Error != nil {
-				t.Fatal(out.Error)
+			if out := idna.ToASCII(reflect.ValueOf(&s).Elem(), nil); out.Err != nil {
+				t.Fatal(out.Err)
 			}
 
 			if s != tc.want {
@@ -57,28 +57,27 @@ func TestToASCIIRejectsInvalidDomains(t *testing.T) {
 		s := input
 
 		out := idna.ToASCII(reflect.ValueOf(&s).Elem(), nil)
-		if !errors.Is(out.Error, idna.ErrInvalidDomain) {
-			t.Fatalf("idna(%q): got %v, want ErrInvalidDomain", input, out.Error)
+		if !errors.Is(out.Err, idna.ErrInvalidDomain) {
+			t.Fatalf("idna(%q): got %v, want ErrInvalidDomain", input, out.Err)
 		}
 
-		if s != input || strings.Contains(out.Error.Error(), input) {
-			t.Fatalf("idna(%q): value changed to %q or leaked into %v", input, s, out.Error)
+		if s != input || strings.Contains(out.Err.Error(), input) {
+			t.Fatalf("idna(%q): value changed to %q or leaked into %v", input, s, out.Err)
 		}
 	}
 }
 
 func TestRegisterThroughNormalize(t *testing.T) {
 	t.Parallel()
-	idna.Register(nil)
 
-	r := modifiers.NewRegistry()
-
-	for _, name := range []string{"trim", "email", "url"} {
-		m, _ := modifiers.DefaultRegistry().Get(name)
-		r.Register(name, m)
+	if err := idna.Register(nil); !errors.Is(err, modifiers.ErrInvalidRegistration) {
+		t.Fatalf("Register(nil) = %v, want ErrInvalidRegistration", err)
 	}
 
-	idna.Register(r)
+	r := modifiers.DefaultRegistry()
+	if err := idna.Register(r); err != nil {
+		t.Fatal(err)
+	}
 
 	type contact struct {
 		Email   *string `normalize:"trim,email,idna"`
@@ -97,7 +96,7 @@ func TestRegisterThroughNormalize(t *testing.T) {
 	bad := contact{Website: "https://bad_host.example"}
 
 	err := normalize.NormalizeWithRegistry(&bad, r)
-	if modifierErr, ok := errors.AsType[*modifiers.ModifierError](err); !ok || modifierErr.FieldPath != "Website" || !errors.Is(err, idna.ErrInvalidDomain) {
+	if modifierErr, ok := errors.AsType[*modifiers.Error](err); !ok || modifierErr.Path != "Website" || !errors.Is(err, idna.ErrInvalidDomain) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 }

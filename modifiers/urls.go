@@ -19,8 +19,8 @@ var defaultPorts = map[string]string{"http": "80", "https": "443", "ws": "80", "
 // empty http or https path the root path "/". Query and fragment are kept.
 // Relative references, opaque URLs such as mailto: and values that do not
 // parse are only trimmed. It does not validate the URL.
-func URL(v reflect.Value, _ map[string]string) ModifierResult {
-	return ApplyStringModifier(v, normalizeURL)
+func URL(v reflect.Value, _ map[string]string) Result {
+	return ApplyString(v, normalizeURL)
 }
 
 func normalizeURL(s string) (string, bool) {

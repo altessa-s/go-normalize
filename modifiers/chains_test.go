@@ -22,7 +22,7 @@ func TestApplyStringModifierCopiesNonSettableChains(t *testing.T) {
 	s := "  x  "
 	inner := &s
 
-	out := modifiers.ApplyStringModifier(reflect.ValueOf(&inner), func(v string) (string, bool) {
+	out := modifiers.ApplyString(reflect.ValueOf(&inner), func(v string) (string, bool) {
 		n := strings.TrimSpace(v)
 		return n, n != v
 	})
@@ -35,7 +35,7 @@ func TestApplyStringModifierCopiesNonSettableChains(t *testing.T) {
 	}
 
 	var nilInner *string
-	if out := modifiers.ApplyStringModifier(reflect.ValueOf(&nilInner), func(v string) (string, bool) { return v, false }); out.Value.Elem().IsValid() && !out.Value.Elem().IsNil() {
+	if out := modifiers.ApplyString(reflect.ValueOf(&nilInner), func(v string) (string, bool) { return v, false }); out.Value.Elem().IsValid() && !out.Value.Elem().IsNil() {
 		t.Fatalf("nil inner pointer was filled: %v", out.Value)
 	}
 }
@@ -46,7 +46,7 @@ func TestApplyModifierCopiesNonSettableChains(t *testing.T) {
 	n := 200
 	inner := &n
 
-	out := modifiers.ApplyModifier(reflect.ValueOf(&inner), clampAge)
+	out := modifiers.Apply(reflect.ValueOf(&inner), clampAge)
 	if n != 200 || inner != &n {
 		t.Fatalf("caller memory changed: %d", n)
 	}
@@ -59,7 +59,7 @@ func TestApplyModifierCopiesNonSettableChains(t *testing.T) {
 	smallInner := &small
 
 	original := reflect.ValueOf(&smallInner)
-	if out := modifiers.ApplyModifier(original, clampAge); out.Value.Pointer() != original.Pointer() {
+	if out := modifiers.Apply(original, clampAge); out.Value.Pointer() != original.Pointer() {
 		t.Fatal("an unchanged chain was replaced")
 	}
 }
@@ -113,7 +113,7 @@ func TestApplyStringModifierLeavesSettableNilPointers(t *testing.T) {
 	v := reflect.ValueOf(&field).Elem()
 	called := false
 
-	out := modifiers.ApplyStringModifier(v, func(s string) (string, bool) { called = true; return s, false })
+	out := modifiers.ApplyString(v, func(s string) (string, bool) { called = true; return s, false })
 	if called || field != nil || out.Value.Type() != v.Type() {
 		t.Fatalf("nil field: called=%v field=%v", called, field)
 	}

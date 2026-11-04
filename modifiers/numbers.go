@@ -17,7 +17,7 @@ import (
 // be omitted, but not both. Bounds are parsed for the field's own type, so a
 // bound outside that type's range, a non-numeric bound or min above max fails
 // with ErrInvalidParameter. NaN is left unchanged.
-func Clamp(v reflect.Value, params map[string]string) ModifierResult {
+func Clamp(v reflect.Value, params map[string]string) Result {
 	lo, hasLo := params["min"]
 
 	hi, hasHi := params["max"]

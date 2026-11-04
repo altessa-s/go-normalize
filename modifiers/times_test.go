@@ -26,8 +26,8 @@ func TestUTC(t *testing.T) {
 
 	utc := must(modifiers.DefaultRegistry().Get("utc"))
 	for i := range reflect.TypeOf(v).NumField() {
-		if out := utc(reflect.ValueOf(&v).Elem().Field(i), nil); out.Error != nil {
-			t.Fatal(out.Error)
+		if out := utc(reflect.ValueOf(&v).Elem().Field(i), nil); out.Err != nil {
+			t.Fatal(out.Err)
 		}
 	}
 
@@ -62,8 +62,8 @@ func TestTruncateTime(t *testing.T) {
 			t.Parallel()
 
 			got := at
-			if out := truncate(reflect.ValueOf(&got).Elem(), map[string]string{"unit": tc.unit}); out.Error != nil {
-				t.Fatal(out.Error)
+			if out := truncate(reflect.ValueOf(&got).Elem(), map[string]string{"unit": tc.unit}); out.Err != nil {
+				t.Fatal(out.Err)
 			}
 
 			if !got.Equal(tc.want) {
@@ -76,8 +76,8 @@ func TestTruncateTime(t *testing.T) {
 		got := at
 
 		out := truncate(reflect.ValueOf(&got).Elem(), map[string]string{"unit": unit})
-		if !errors.Is(out.Error, modifiers.ErrInvalidParameter) || !got.Equal(at) {
-			t.Fatalf("unit %q: got %v, value %v", unit, out.Error, got)
+		if !errors.Is(out.Err, modifiers.ErrInvalidParameter) || !got.Equal(at) {
+			t.Fatalf("unit %q: got %v, value %v", unit, out.Err, got)
 		}
 	}
 }

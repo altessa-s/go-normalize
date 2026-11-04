@@ -6,8 +6,10 @@
 // nfkc, fold and title(lang=xx). It is a separate module so that
 // golang.org/x/text stays out of the root module's requirements.
 //
-//	registry := modifiers.NewRegistry()
-//	text.Register(registry)
+//	registry := modifiers.DefaultRegistry()
+//	if err := text.Register(registry); err != nil {
+//		return err
+//	}
 //
 //	type Account struct {
 //		Login string `normalize:"trim,nfkc,fold"`

@@ -186,8 +186,8 @@ func BenchmarkNormalizeCustomNormalizer(b *testing.B) {
 
 func BenchmarkNormalizeWithRegistryParams(b *testing.B) {
 	r := modifiers.NewRegistry()
-	r.Register("pad", func(v reflect.Value, params map[string]string) modifiers.ModifierResult {
-		return modifiers.ApplyStringModifier(v, func(s string) (string, bool) { return s + params["with"], params["with"] != "" })
+	r.Register("pad", func(v reflect.Value, params map[string]string) modifiers.Result {
+		return modifiers.ApplyString(v, func(s string) (string, bool) { return s + params["with"], params["with"] != "" })
 	})
 
 	type row struct {

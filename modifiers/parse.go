@@ -9,17 +9,17 @@ import "strings"
 // Parse parses a modifier clause such as trim or phone(region=US). Parameters
 // are separated by semicolons; a parameter without '=' maps to an empty value.
 // Every call returns a fresh parameter map, so callers may modify it.
-func Parse(s string) ModifierParams {
+func Parse(s string) Clause {
 	s = strings.TrimSpace(s)
 
 	i := strings.IndexByte(s, '(')
 	if i < 0 {
-		return ModifierParams{Name: s}
+		return Clause{Name: s}
 	}
 
 	name := strings.TrimSpace(s[:i])
 	if name == "" || !strings.HasSuffix(s, ")") {
-		return ModifierParams{Name: s}
+		return Clause{Name: s}
 	}
 
 	p := map[string]string{}
@@ -33,5 +33,5 @@ func Parse(s string) ModifierParams {
 		p[strings.TrimSpace(k)] = strings.TrimSpace(v)
 	}
 
-	return ModifierParams{Name: name, Params: p}
+	return Clause{Name: name, Params: p}
 }

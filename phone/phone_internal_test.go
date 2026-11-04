@@ -10,12 +10,17 @@ import (
 	"testing"
 )
 
-func TestNormalizePhoneDoesNotCacheLargeInputs(t *testing.T) {
+func TestPhoneDoesNotCacheLargeInputs(t *testing.T) {
 	large := strings.Repeat("x", maxPhoneCacheKeyLength+1)
 	before := len(phoneCache.data)
 
-	result := NormalizePhone(reflect.ValueOf(large), map[string]string{"region": "US"})
-	if result.Error == nil {
+	m, err := New("US")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	result := m(reflect.ValueOf(large), nil)
+	if result.Err == nil {
 		t.Fatal("invalid number accepted")
 	}
 

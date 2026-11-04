@@ -31,8 +31,8 @@ func apply(t *testing.T, r *modifiers.Registry, name string, params map[string]s
 	}
 
 	s := input
-	if out := m(reflect.ValueOf(&s).Elem(), params); out.Error != nil {
-		t.Fatal(out.Error)
+	if out := m(reflect.ValueOf(&s).Elem(), params); out.Err != nil {
+		t.Fatal(out.Err)
 	}
 
 	return s
@@ -81,14 +81,17 @@ func TestTitleRejectsInvalidLanguage(t *testing.T) {
 	s := "hello"
 
 	out := text.Title(reflect.ValueOf(&s).Elem(), map[string]string{"lang": "not a tag"})
-	if !errors.Is(out.Error, modifiers.ErrInvalidParameter) || s != "hello" {
-		t.Fatalf("got %v, value %q", out.Error, s)
+	if !errors.Is(out.Err, modifiers.ErrInvalidParameter) || s != "hello" {
+		t.Fatalf("got %v, value %q", out.Err, s)
 	}
 }
 
 func TestRegisterThroughNormalize(t *testing.T) {
 	t.Parallel()
-	text.Register(nil)
+
+	if err := text.Register(nil); !errors.Is(err, modifiers.ErrInvalidRegistration) {
+		t.Fatalf("Register(nil) = %v, want ErrInvalidRegistration", err)
+	}
 
 	r := newRegistry()
 

@@ -64,8 +64,8 @@ func BenchmarkBuiltins(b *testing.B) {
 			for b.Loop() {
 				s = tc.input
 
-				if out := m(v, nil); out.Error != nil {
-					b.Fatal(out.Error)
+				if out := m(v, nil); out.Err != nil {
+					b.Fatal(out.Err)
 				}
 			}
 		})
@@ -126,7 +126,7 @@ func BenchmarkApplyModifier(b *testing.B) {
 	for b.Loop() {
 		n = 200
 
-		modifiers.ApplyModifier(v, clamp)
+		modifiers.Apply(v, clamp)
 	}
 }
 
@@ -141,8 +141,8 @@ func BenchmarkTruncate(b *testing.B) {
 	for b.Loop() {
 		s = "\u043d\u043e\u0440\u043c\u0430\u043b\u0438\u0437\u0430\u0446\u0438\u044f \u0441\u0442\u0440\u043e\u043a\u0438"
 
-		if out := modifiers.Truncate(v, params); out.Error != nil {
-			b.Fatal(out.Error)
+		if out := modifiers.Truncate(v, params); out.Err != nil {
+			b.Fatal(out.Err)
 		}
 	}
 }
@@ -187,8 +187,8 @@ func BenchmarkTruncateTime(b *testing.B) {
 	for b.Loop() {
 		ts = at
 
-		if out := modifiers.TruncateTime(v, params); out.Error != nil {
-			b.Fatal(out.Error)
+		if out := modifiers.TruncateTime(v, params); out.Err != nil {
+			b.Fatal(out.Err)
 		}
 	}
 }
@@ -204,8 +204,8 @@ func BenchmarkClamp(b *testing.B) {
 	for b.Loop() {
 		n = 250
 
-		if out := modifiers.Clamp(v, params); out.Error != nil {
-			b.Fatal(out.Error)
+		if out := modifiers.Clamp(v, params); out.Err != nil {
+			b.Fatal(out.Err)
 		}
 	}
 }

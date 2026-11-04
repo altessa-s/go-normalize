@@ -17,22 +17,14 @@ import (
 	"github.com/altessa-s/go-normalize/phone"
 )
 
-// newPhoneRegistry composes the built-ins a consumer needs with the phone modifier.
+// newPhoneRegistry adds the phone modifier to the built-ins.
 func newPhoneRegistry(t testing.TB) *modifiers.Registry {
 	t.Helper()
 
-	r := modifiers.NewRegistry()
-
-	for _, name := range []string{"trim", "nil_on_empty"} {
-		m, ok := modifiers.DefaultRegistry().Get(name)
-		if !ok {
-			t.Fatalf("missing built-in %s", name)
-		}
-
-		r.Register(name, m)
+	r := modifiers.DefaultRegistry()
+	if err := phone.Register(r, "RU"); err != nil {
+		t.Fatal(err)
 	}
-
-	phone.Register(r)
 
 	return r
 }
@@ -89,8 +81,8 @@ func TestIntegrationPhoneErrorContext(t *testing.T) {
 		t.Fatalf("got %v, want ErrInvalidPhone", err)
 	}
 
-	modifierErr, ok := errors.AsType[*modifiers.ModifierError](err)
-	if !ok || modifierErr.FieldPath != "Contacts[1].Mobile" || modifierErr.ModifierName != "phone" {
+	modifierErr, ok := errors.AsType[*modifiers.Error](err)
+	if !ok || modifierErr.Path != "Contacts[1].Mobile" || modifierErr.Modifier != "phone" {
 		t.Fatalf("unexpected context: %v", err)
 	}
 

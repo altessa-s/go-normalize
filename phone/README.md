@@ -10,29 +10,33 @@ the root module's requirements.
 ## Usage
 
 ```go
-registry := modifiers.NewRegistry()
-phone.Register(registry)
+registry := modifiers.DefaultRegistry()
+if err := phone.Register(registry, "US"); err != nil {
+	return err
+}
 
 type Contact struct {
-	Mobile string `normalize:"phone(region=US)"`
+	Mobile string `normalize:"trim,phone"`
+	Office string `normalize:"trim,phone(region=DE)"`
 }
 err := normalize.NormalizeWithRegistry(&contact, registry)
 ```
 
 ## Key types
 
-| Identifier        | Description                                                                                       |
-|-------------------|---------------------------------------------------------------------------------------------------|
-| `Register`        | Adds the `phone` modifier to a `Registrar`; nothing is registered implicitly                      |
-| `Registrar`       | `Register(name, modifier)`; `*modifiers.Registry` implements it                                   |
-| `NormalizePhone`  | The modifier: formats `string` and pointer-to-`string` values in E.164                            |
-| `ErrInvalidPhone` | Cause of the `*modifiers.ModifierError` for numbers that do not parse or are invalid for the region |
+| Identifier             | Description                                                                                        |
+|------------------------|----------------------------------------------------------------------------------------------------|
+| `Register`             | Adds the `phone` modifier with a required default region to a `modifiers.Registrar`                |
+| `New`                  | Returns the modifier for a default region, for registering under another name                      |
+| `ErrInvalidPhone`      | Cause of the `*modifiers.Error` for numbers that do not parse or are invalid for the region        |
+| `ErrUnsupportedRegion` | A default or tag region without phone number metadata                                              |
 
 ## Parameters
 
-| Parameter | Default | Description                                                         |
-|-----------|---------|---------------------------------------------------------------------|
-| `region`  | `RU`    | ISO 3166-1 region used for numbers without a country code; any case |
+| Parameter | Default                         | Description                                                         |
+|-----------|---------------------------------|---------------------------------------------------------------------|
+| `region`  | The region passed to `Register` | ISO 3166-1 region used for numbers without a country code; any case |
 
-Spaces, `-`, `(`, `)`, `.` and `_` are removed before parsing; empty values are left as they are. Results, including failures, are kept in a
-bounded FIFO cache of 4096 entries; inputs longer than 256 bytes with their region are not cached.
+The modifier formats `string` values and pointer chains ending in one, named types included, in E.164. Spaces, `-`, `(`, `)`, `.` and `_`
+are removed before parsing; empty values are left as they are. Results, including failures, are kept in a bounded FIFO cache of 4096
+entries; inputs longer than 256 bytes with their region are not cached.

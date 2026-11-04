@@ -6,8 +6,10 @@
 // domain names to their ASCII form for normalize tags. It is a separate module
 // so that golang.org/x/net stays out of the root module's requirements.
 //
-//	registry := modifiers.NewRegistry()
-//	idna.Register(registry)
+//	registry := modifiers.DefaultRegistry()
+//	if err := idna.Register(registry); err != nil {
+//		return err
+//	}
 //
 //	type Contact struct {
 //		Email   string `normalize:"trim,email,idna"`
@@ -17,6 +19,6 @@
 // # Errors
 //
 // A domain that is not a valid internationalized domain name fails with a
-// *modifiers.ModifierError whose cause is ErrInvalidDomain. The error does
+// *modifiers.Error whose cause is ErrInvalidDomain. The error does
 // not include the value.
 package idna

@@ -33,7 +33,7 @@ type structPlan struct {
 type fieldPlan struct {
 	index    int
 	name     string
-	clauses  []modifiers.ModifierParams
+	clauses  []modifiers.Clause
 	traverse bool
 }
 

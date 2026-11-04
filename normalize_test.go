@@ -207,9 +207,9 @@ func TestRegistryCustomModifier(t *testing.T) {
 	t.Parallel()
 
 	r := modifiers.NewRegistry()
-	r.Register("set", func(v reflect.Value, _ map[string]string) modifiers.ModifierResult {
+	r.Register("set", func(v reflect.Value, _ map[string]string) modifiers.Result {
 		v.SetString("ok")
-		return modifiers.ModifierResult{Value: v}
+		return modifiers.Result{Value: v}
 	})
 
 	type input struct {
@@ -228,9 +228,9 @@ func TestNormalizeParameterizedModifiersInSlices(t *testing.T) {
 	var captured map[string]string
 
 	r := modifiers.NewRegistry()
-	r.Register("capture", func(v reflect.Value, params map[string]string) modifiers.ModifierResult {
+	r.Register("capture", func(v reflect.Value, params map[string]string) modifiers.Result {
 		captured = params
-		return modifiers.ModifierResult{Value: v}
+		return modifiers.Result{Value: v}
 	})
 
 	type item struct {
@@ -341,8 +341,8 @@ func TestNormalizeModifierErrorPathAndCustom(t *testing.T) {
 	type parent struct{ Items []item }
 
 	r := modifiers.NewRegistry()
-	r.Register("reject", func(v reflect.Value, _ map[string]string) modifiers.ModifierResult {
-		return modifiers.ModifierResult{Error: &modifiers.ModifierError{Cause: errors.New("bad")}}
+	r.Register("reject", func(v reflect.Value, _ map[string]string) modifiers.Result {
+		return modifiers.Result{Err: errors.New("bad")}
 	})
 
 	err := normalize.NormalizeWithRegistry(&parent{Items: []item{{}}}, r)
@@ -351,38 +351,39 @@ func TestNormalizeModifierErrorPathAndCustom(t *testing.T) {
 	}
 }
 
-func TestModifierErrorContextDoesNotMutateSharedError(t *testing.T) {
+func TestModifierErrorWrapsSharedSentinelPerField(t *testing.T) {
 	t.Parallel()
 
-	shared := &modifiers.ModifierError{Cause: errors.New("rejected")}
+	rejected := errors.New("rejected")
 	r := modifiers.NewRegistry()
-	r.Register("reject", func(reflect.Value, map[string]string) modifiers.ModifierResult {
-		return modifiers.ModifierResult{Error: shared}
+	r.Register("reject", func(reflect.Value, map[string]string) modifiers.Result {
+		return modifiers.Result{Err: rejected}
 	})
 
 	type input struct {
-		First  string `normalize:"reject"`
-		Second string `normalize:"reject"`
-	}
-
-	err := normalize.NormalizeWithRegistry(&input{}, r)
-
-	var modifierErr *modifiers.ModifierError
-	if !errors.As(err, &modifierErr) || modifierErr.FieldName != "First" {
-		t.Fatalf("first field context missing: %v", err)
+		First string `normalize:"reject"`
 	}
 
 	type secondInput struct {
 		Second string `normalize:"reject"`
 	}
 
+	err := normalize.NormalizeWithRegistry(&input{}, r)
+
+	first, ok := errors.AsType[*modifiers.Error](err)
+	if !ok || first.Field != "First" || first.Modifier != "reject" || !errors.Is(err, rejected) {
+		t.Fatalf("first field context missing: %v", err)
+	}
+
 	err = normalize.NormalizeWithRegistry(&secondInput{}, r)
-	if !errors.As(err, &modifierErr) || modifierErr.FieldName != "Second" {
+
+	second, ok := errors.AsType[*modifiers.Error](err)
+	if !ok || second.Field != "Second" || !errors.Is(err, rejected) {
 		t.Fatalf("second field context missing: %v", err)
 	}
 
-	if shared.FieldName != "" || shared.FieldPath != "" || shared.ModifierName != "" {
-		t.Fatalf("normalizer mutated modifier-owned error: %#v", shared)
+	if first.Field != "First" || first.Path != "First" {
+		t.Fatalf("a later call changed an earlier error: %#v", first)
 	}
 }
 
@@ -424,8 +425,8 @@ func (s staticSource) Get(name string) (modifiers.Modifier, bool) {
 func TestNormalizeWithCustomModifierSource(t *testing.T) {
 	t.Parallel()
 
-	source := staticSource{"shout": func(v reflect.Value, _ map[string]string) modifiers.ModifierResult {
-		return modifiers.ApplyStringModifier(v, func(s string) (string, bool) { return strings.ToUpper(s) + "!", true })
+	source := staticSource{"shout": func(v reflect.Value, _ map[string]string) modifiers.Result {
+		return modifiers.ApplyString(v, func(s string) (string, bool) { return strings.ToUpper(s) + "!", true })
 	}}
 
 	v := struct {
@@ -603,22 +604,22 @@ func TestModifierErrorPathThroughMapsAndArrays(t *testing.T) {
 	type branch struct{ Leaves [2]leaf }
 
 	r := modifiers.NewRegistry()
-	r.Register("reject", func(v reflect.Value, _ map[string]string) modifiers.ModifierResult {
+	r.Register("reject", func(v reflect.Value, _ map[string]string) modifiers.Result {
 		if v.String() == "bad" {
-			return modifiers.ModifierResult{Error: &modifiers.ModifierError{Cause: errors.New("bad value")}}
+			return modifiers.Result{Err: errors.New("bad value")}
 		}
 
-		return modifiers.ModifierResult{Value: v}
+		return modifiers.Result{Value: v}
 	})
 	v := struct{ Branches map[string]branch }{Branches: map[string]branch{"secret": {Leaves: [2]leaf{{Value: "ok"}, {Value: "bad"}}}}}
 	err := normalize.NormalizeWithRegistry(&v, r)
 
-	modifierErr, ok := errors.AsType[*modifiers.ModifierError](err)
+	modifierErr, ok := errors.AsType[*modifiers.Error](err)
 	if !ok {
-		t.Fatalf("got %v, want a *modifiers.ModifierError", err)
+		t.Fatalf("got %v, want a *modifiers.Error", err)
 	}
 
-	if modifierErr.FieldPath != "Branches.{key}.Leaves[1].Value" || modifierErr.FieldName != "Value" || modifierErr.ModifierName != "reject" {
+	if modifierErr.Path != "Branches.{key}.Leaves[1].Value" || modifierErr.Field != "Value" || modifierErr.Modifier != "reject" {
 		t.Fatalf("unexpected error context: %+v", modifierErr)
 	}
 }

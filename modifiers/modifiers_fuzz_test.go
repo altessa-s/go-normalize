@@ -17,8 +17,8 @@ import (
 func applyFuzz(t *testing.T, m modifiers.Modifier, params map[string]string, s string) string {
 	t.Helper()
 
-	if out := m(reflect.ValueOf(&s).Elem(), params); out.Error != nil {
-		t.Fatal(out.Error)
+	if out := m(reflect.ValueOf(&s).Elem(), params); out.Err != nil {
+		t.Fatal(out.Err)
 	}
 
 	return s
