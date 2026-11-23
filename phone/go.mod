@@ -5,7 +5,7 @@ go 1.27.0
 toolchain go1.27.4
 
 require (
-	github.com/altessa-s/go-normalize v0.1.0
+	github.com/altessa-s/go-normalize v0.1.1
 	github.com/nyaruka/phonenumbers v1.8.1
 )
 
