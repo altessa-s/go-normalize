@@ -61,6 +61,7 @@ func TestURL(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
+
 			if again != got {
 				t.Fatalf("url is not idempotent: %q -> %q -> %q", tc.input, got, again)
 			}
