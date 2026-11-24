@@ -4,7 +4,10 @@
 
 package modifiers_test
 
-import "testing"
+import (
+	"strconv"
+	"testing"
+)
 
 func TestURL(t *testing.T) {
 	t.Parallel()
@@ -28,6 +31,13 @@ func TestURL(t *testing.T) {
 		{input: "http://[2001:DB8::1]:8080", want: "http://[2001:db8::1]:8080/"},
 		{input: "http://[FE80::1%25Eth0]:80/", want: "http://[fe80::1%25Eth0]/"},
 		{input: "https://example.com/a%2Fb", want: "https://example.com/a%2Fb"},
+		{input: "A://0? #", want: "a://0?"},
+		{input: "A://0?q=a \u00a0#", want: "a://0?q=a"},
+		{input: "A://0?#", want: "a://0?"},
+		{input: "A://0?q=a b#", want: "a://0?q=a b"},
+		{input: "A://0?q=a #frag", want: "a://0?q=a #frag"},
+		{input: "A://0?q=a%20#", want: "a://0?q=a%20"},
+		{input: "A://0?q=\xff #", want: "a://0?q=\xff"},
 		{input: "https://example.com/", want: "https://example.com/"},
 		{input: "/relative/Path", want: "/relative/Path"},
 		{input: " mailto:Someone@Example.COM ", want: "mailto:Someone@Example.COM"},
@@ -35,7 +45,7 @@ func TestURL(t *testing.T) {
 		{input: "", want: ""},
 	}
 	for _, tc := range cases {
-		t.Run(tc.input, func(t *testing.T) {
+		t.Run(strconv.QuoteToASCII(tc.input), func(t *testing.T) {
 			t.Parallel()
 
 			got, err := applyNamed(t, "url", nil, tc.input)
@@ -45,6 +55,14 @@ func TestURL(t *testing.T) {
 
 			if got != tc.want {
 				t.Fatalf("url(%q) = %q, want %q", tc.input, got, tc.want)
+			}
+
+			again, err := applyNamed(t, "url", nil, got)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if again != got {
+				t.Fatalf("url is not idempotent: %q -> %q -> %q", tc.input, got, again)
 			}
 		})
 	}

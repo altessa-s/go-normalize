@@ -16,7 +16,9 @@ var defaultPorts = map[string]string{"http": "80", "https": "443", "ws": "80", "
 // URL trims a URL and, when it is absolute with a host, applies the syntax
 // normalizations of RFC 3986 section 6.2.2-6.2.3: it lower-cases the scheme
 // and host, drops the default port of http, https, ws and wss, and gives an
-// empty http or https path the root path "/". Query and fragment are kept.
+// empty http or https path the root path "/". It preserves the query and any
+// non-empty fragment. It drops an empty fragment and any trailing query
+// whitespace that dropping the fragment exposes.
 // Relative references, opaque URLs such as mailto: and values that do not
 // parse are only trimmed. It does not validate the URL.
 func URL(v reflect.Value, _ map[string]string) Result {
@@ -52,7 +54,8 @@ func normalizeURL(s string) (string, bool) {
 		u.Path = "/"
 	}
 
-	out := u.String()
+	// String omits an empty fragment, which can expose trailing query whitespace.
+	out := strings.TrimSpace(u.String())
 
 	return out, out != s
 }
